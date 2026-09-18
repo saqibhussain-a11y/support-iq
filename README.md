@@ -7,22 +7,52 @@ resolve or escalate the issue, and evaluates the quality of the AI response.
 This repository is being built module by module, following an AI Engineering roadmap from
 foundational infrastructure through RAG, multi-agent orchestration, evaluation, and observability.
 
-## Module 1 — Foundation (current)
+## Module 1 — Foundation
 
-This module sets up the application skeleton only:
+This module set up the application skeleton only:
 
 ```text
 Next.js (frontend)  →  FastAPI (backend)  →  PostgreSQL + pgvector
 ```
 
-No AI/RAG/agent functionality is implemented yet — that begins in Module 2.
+## Module 2 — LLM Layer (current)
+
+A provider-agnostic LLM abstraction, so agents (Module 5+) never call Groq directly:
+
+```text
+Agent  →  LLMService  →  ModelProvider (interface)  →  GroqProvider  →  Groq API
+```
+
+- `app/llm/provider.py` — `ModelProvider` abstract base class (`complete`, `stream`).
+- `app/llm/groq_provider.py` — the only implementation today. Retries on transient errors are
+  delegated to the official `groq` SDK's built-in `max_retries`, not hand-rolled.
+- `app/llm/service.py` — `LLMService`, the ergonomic layer agents will actually call. Adds
+  `complete_structured()`: request JSON-mode output from the model, then validate it against a
+  Pydantic schema, raising `LLMError` if the model didn't comply.
+- `app/llm/dependencies.py` — `get_llm_service()` wires `Settings` → `GroqProvider` → `LLMService`.
+
+No agents, RAG, or LangGraph yet — this module is purely the LLM plumbing.
+
+### Trying it live
+
+Requires a real `GROQ_API_KEY` in `.env` (get one from console.groq.com):
+
+```bash
+cd apps/backend
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+python -m scripts.demo_llm
+```
+
+This sends a sample "charged twice" support message through `LLMService.complete_structured()`
+and prints the resulting `{category, priority, sentiment}` JSON.
 
 ### Stack
 
 | Layer      | Technology                              |
 | ---------- | ---------------------------------------- |
 | Frontend   | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, shadcn/ui |
-| Backend    | FastAPI, Pydantic v2, SQLAlchemy (async) |
+| Backend    | FastAPI, Pydantic v2, SQLAlchemy (async), Groq SDK |
 | Database   | PostgreSQL 16 + pgvector                 |
 | Infra      | Docker, Docker Compose                   |
 
@@ -37,7 +67,9 @@ supportiq/
 │       │   ├── api/     # Route handlers (health checks for now)
 │       │   ├── core/    # Settings/config
 │       │   ├── db/      # Database engine/session
+│       │   ├── llm/     # ModelProvider / GroqProvider / LLMService
 │       │   └── main.py
+│       ├── scripts/     # Manual demo/verification scripts
 │       └── tests/
 ├── packages/            # Code shared between apps (empty for now)
 ├── db/init/             # SQL run once when the Postgres container first initializes
