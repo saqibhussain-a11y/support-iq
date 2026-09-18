@@ -30,15 +30,17 @@ No AI/RAG/agent functionality is implemented yet — that begins in Module 2.
 
 ```text
 supportiq/
-├── frontend/           # Next.js app
-├── backend/            # FastAPI app
-│   ├── app/
-│   │   ├── api/        # Route handlers (health checks for now)
-│   │   ├── core/       # Settings/config
-│   │   ├── db/         # Database engine/session
-│   │   └── main.py
-│   └── tests/
-├── db/init/            # SQL run once when the Postgres container first initializes
+├── apps/
+│   ├── frontend/        # Next.js app
+│   └── backend/         # FastAPI app
+│       ├── app/
+│       │   ├── api/     # Route handlers (health checks for now)
+│       │   ├── core/    # Settings/config
+│       │   ├── db/      # Database engine/session
+│       │   └── main.py
+│       └── tests/
+├── packages/            # Code shared between apps (empty for now)
+├── db/init/             # SQL run once when the Postgres container first initializes
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -60,7 +62,7 @@ docker compose up --build
 ### Backend
 
 ```bash
-cd backend
+cd apps/backend
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
@@ -73,7 +75,7 @@ Docker, point it at `localhost` instead of the `postgres` service hostname.
 ### Frontend
 
 ```bash
-cd frontend
+cd apps/frontend
 npm install
 npm run dev
 ```
@@ -93,10 +95,10 @@ docker compose up postgres
 
 ```bash
 # Backend
-cd backend && pip install -r requirements-dev.txt && pytest
+cd apps/backend && pip install -r requirements-dev.txt && pytest
 
 # Frontend
-cd frontend && npm test
+cd apps/frontend && npm test
 ```
 
 ## Roadmap

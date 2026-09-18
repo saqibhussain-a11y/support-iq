@@ -5,9 +5,7 @@
 # Node / Next.js
 node_modules/
 .next/
-frontend/.next/
-frontend/node_modules/
-frontend/out/
+out/
 npm-debug.log*
 
 # Python
@@ -15,7 +13,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-backend/.pytest_cache/
+.pytest_cache/
 *.egg-info/
 
 # OS

@@ -18,7 +18,7 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build: ./apps/backend
     restart: unless-stopped
     env_file:
       - .env
@@ -32,7 +32,7 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build: ./apps/frontend
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8000}
@@ -41,7 +41,7 @@ services:
     depends_on:
       - backend
     volumes:
-      - ./frontend:/app
+      - ./apps/frontend:/app
       - /app/node_modules
       - /app/.next
 

@@ -10,7 +10,7 @@ logs:
 	docker compose logs -f
 
 test-backend:
-	cd backend && pip install -r requirements-dev.txt -q && pytest
+	cd apps/backend && pip install -r requirements-dev.txt -q && pytest
 
 test-frontend:
-	cd frontend && npm test
+	cd apps/frontend && npm test
