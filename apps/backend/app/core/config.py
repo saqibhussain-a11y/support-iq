@@ -4,8 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Central application configuration, populated from environment variables."""
-
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: str = "development"
@@ -16,7 +14,6 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # Reserved for Module 2 (LLM Layer) — not used yet.
     groq_api_key: str | None = None
     groq_model: str | None = None
 

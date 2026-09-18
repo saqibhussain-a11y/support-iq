@@ -14,7 +14,6 @@ def get_engine() -> AsyncEngine:
 
 
 async def ping_database() -> bool:
-    """Run a trivial query to confirm the database is reachable."""
     engine = get_engine()
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
