@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     knowledge_base_path: Path = REPO_ROOT / "knowledge_base"
 
+    reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    retrieval_candidate_limit: int = 20
+    retrieval_top_k: int = 5
+    rrf_k: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

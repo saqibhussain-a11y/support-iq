@@ -82,7 +82,7 @@ python -m scripts.demo_llm
 This sends a sample "charged twice" support message through `LLMService.complete_structured()`
 and prints the resulting `{category, priority, sentiment}` JSON.
 
-## Module 3 — Knowledge Base & Indexing (current)
+## Module 3 — Knowledge Base & Indexing
 
 Turns the markdown policy docs in `knowledge_base/` into embedded, searchable chunks in pgvector:
 
@@ -122,6 +122,53 @@ python -m scripts.index_knowledge_base
 Prints a summary: documents processed, chunks created, chunks embedded, total rows now in the
 table.
 
+## Module 4 — RAG & Hybrid Retrieval (current)
+
+Turns a customer's question into the handful of policy chunks actually relevant to it:
+
+```text
+Query → embed → Dense search (pgvector cosine) + Sparse search (Postgres full-text)
+      → RRF fusion → candidate set → Cross-encoder rerank → top-K chunks with scores
+```
+
+- **Why hybrid, not just dense?** Dense (embedding) search understands meaning ("charged twice"
+  ≈ "duplicate charge") but can miss exact terms; sparse (keyword/full-text) search catches exact
+  matches dense search sometimes ranks low. Running both and fusing catches what either alone
+  would miss.
+- `app/retrieval/dense.py` — pgvector cosine similarity via `.cosine_distance()`, using the same
+  HNSW index built in Module 3.
+- `app/retrieval/sparse.py` — Postgres full-text search (`to_tsvector`/`plainto_tsquery`/`ts_rank`)
+  against a new generated `content_tsv` column (`alembic/versions/0002_...`) with a GIN index —
+  a real schema change via migration, not a one-off script, for the same reason Module 3 used
+  Alembic in the first place.
+- `app/retrieval/fusion.py` — Reciprocal Rank Fusion (`score = Σ 1/(k + rank)` across each
+  ranking a chunk appears in). Combines two differently-scaled rankings (cosine distance vs.
+  `ts_rank`) without needing to normalize either — RRF only cares about rank position, not score
+  magnitude, which is exactly why it's the standard way to merge rankings from unrelated scoring
+  systems.
+- `app/reranking/` — mirrors `app/llm/`/`app/embeddings/` exactly: `Reranker` (interface) →
+  `FastEmbedReranker` (`Xenova/ms-marco-MiniLM-L-6-v2` cross-encoder, local, no API key). Dense
+  and sparse search are fast but approximate at the top-20; a cross-encoder scores each
+  (query, chunk) pair jointly and is far more accurate — but too slow to run over the whole table,
+  so it only reorders the ~20 RRF-fused candidates, not all 39 rows.
+- `app/retrieval/service.py` — `RetrievalService` orchestrates all of the above. Note: dense and
+  sparse search run **sequentially** on the same `AsyncSession`, not concurrently via
+  `asyncio.gather` — a single SQLAlchemy async session can't safely run two queries at once; this
+  was an actual bug caught during live verification, not a hypothetical one.
+
+No agents yet — `RetrievalService` is a building block Module 5's Response Agent will call, not
+a user-facing feature itself.
+
+### Querying the knowledge base
+
+```bash
+cd apps/backend
+python -m scripts.query_knowledge_base "Can I get a refund for a duplicate subscription charge?"
+```
+
+Prints the top-K chunks ranked by rerank score, each with its fused (RRF) score, source document,
+and category.
+
 ### Stack
 
 | Layer      | Technology                              |
@@ -145,6 +192,8 @@ supportiq/
 │       │   ├── llm/     # ModelProvider / GroqProvider / LLMService
 │       │   ├── embeddings/  # EmbeddingProvider / FastEmbedProvider
 │       │   ├── knowledge/   # loader / chunker / indexer for knowledge_base/
+│       │   ├── retrieval/   # dense + sparse search, RRF fusion, RetrievalService
+│       │   ├── reranking/   # Reranker / FastEmbedReranker
 │       │   └── main.py
 │       ├── alembic/     # Schema migrations
 │       ├── scripts/     # Manual demo/verification/indexing scripts

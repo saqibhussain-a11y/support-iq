@@ -1,8 +1,8 @@
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Computed, Integer, String, Text
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -19,3 +19,6 @@ class DocumentChunkRecord(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSION), nullable=False)
+    content_tsv: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('english', content)", persisted=True), nullable=True
+    )
