@@ -1,12 +1,12 @@
-.PHONY: up down logs test-backend test-frontend
+.PHONY: db-up db-down db-logs test-backend test-frontend migrate index-knowledge-base
 
-up:
-	docker compose up --build
+db-up:
+	docker compose up -d
 
-down:
+db-down:
 	docker compose down
 
-logs:
+db-logs:
 	docker compose logs -f
 
 test-backend:
@@ -14,3 +14,9 @@ test-backend:
 
 test-frontend:
 	cd apps/frontend && npm test
+
+migrate:
+	cd apps/backend && alembic upgrade head
+
+index-knowledge-base:
+	cd apps/backend && python -m scripts.index_knowledge_base

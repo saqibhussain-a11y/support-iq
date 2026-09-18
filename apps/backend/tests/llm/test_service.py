@@ -46,7 +46,7 @@ class FakeProvider(ModelProvider):
 def make_response(content: str) -> LLMResponse:
     return LLMResponse(
         content=content,
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-20b",
         finish_reason="stop",
         usage=TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
     )

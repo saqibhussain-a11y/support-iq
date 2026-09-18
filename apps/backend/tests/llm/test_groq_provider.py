@@ -18,7 +18,7 @@ def make_chat_completion(content: str, finish_reason: str = "stop", usage: tuple
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens
         )
     choice = SimpleNamespace(message=SimpleNamespace(content=content), finish_reason=finish_reason)
-    return SimpleNamespace(choices=[choice], model="llama-3.3-70b-versatile", usage=usage_obj)
+    return SimpleNamespace(choices=[choice], model="openai/gpt-oss-20b", usage=usage_obj)
 
 
 async def fake_chunk_stream(chunks: list[str]):
@@ -34,7 +34,7 @@ def make_rate_limit_error() -> groq.RateLimitError:
 
 @pytest.fixture
 def provider() -> GroqProvider:
-    return GroqProvider(api_key="test-key", model="llama-3.3-70b-versatile")
+    return GroqProvider(api_key="test-key", model="openai/gpt-oss-20b")
 
 
 @pytest.mark.asyncio

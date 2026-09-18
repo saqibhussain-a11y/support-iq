@@ -1,6 +1,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    container_name: supportiq-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-supportiq}
@@ -16,34 +17,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  backend:
-    build: ./apps/backend
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-supportiq}:${POSTGRES_PASSWORD:-supportiq}@postgres:5432/${POSTGRES_DB:-supportiq}
-      CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-3000}"]'
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  frontend:
-    build: ./apps/frontend
-    restart: unless-stopped
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8000}
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
-    depends_on:
-      - backend
-    volumes:
-      - ./apps/frontend:/app
-      - /app/node_modules
-      - /app/.next
 
 volumes:
   postgres_data:
