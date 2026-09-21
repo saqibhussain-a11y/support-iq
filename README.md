@@ -268,7 +268,7 @@ curl -s http://localhost:8000/api/tickets \
   -d '{"message": "I was charged twice for my subscription this month and I want a refund."}'
 ```
 
-## Module 7 — Validation & Escalation (current)
+## Module 7 — Validation & Escalation
 
 A deterministic rule layer sits between the LLM's answer and the customer, deciding whether a
 human needs to see this ticket before (or instead of) the automated response going out. This is
@@ -321,6 +321,71 @@ python -m scripts.demo_workflow "I think someone stole my card"
 
 Prints classification, response, and now escalation level + reasons.
 
+## Module 8 — Evaluation (current)
+
+Every module so far has been checked by hand-picking one or two example messages and reading the
+output. That doesn't scale, and it doesn't produce a number you can track over time. Module 8
+replaces one-off manual checks with a small, curated golden dataset and an automated harness that
+runs the *entire* Module 6/7 workflow against it and scores four independent dimensions per case.
+
+```text
+EvalCase (message + expected category/escalation/sources/facts)
+   → run through the real SupportWorkflowService
+   → score: category match · retrieval hit · escalation match · LLM-as-judge answer score
+   → EvalReport (per-case results + aggregate accuracy/pass-rate)
+```
+
+- `app/evaluation/dataset.py` — 8 cases grounded in real, specific facts from `knowledge_base/`
+  (not generic questions), covering: a clean auto-resolve case, an immediate-fraud case, two cases
+  that intentionally probe the known Module 7 escalation gap, a documented "resolve automatically"
+  example straight from `escalation_policy.md`, a category question, a no-retrieval-needed
+  greeting, and a real-world review-tier case that Module 7 already handles correctly.
+- `app/evaluation/judge.py` — `AnswerJudge`, an **LLM-as-judge**: a third distinct use of
+  `LLMService.complete_structured()` (after classification and now grading), scoring 0.0–1.0
+  whether the answer conveys a list of expected facts. This exists because deterministic checks
+  can verify *category*, *which documents were retrieved*, and *escalation level*, but not whether
+  free-text prose actually says the right thing — that needs a judge, not a string match.
+- `app/evaluation/runner.py` — `EvaluationRunner` runs each case through the real
+  `SupportWorkflowService`, scores all four dimensions, and aggregates per-dimension accuracy
+  plus an overall pass rate (all four dimensions must pass, judge score ≥ 0.7).
+- `scripts/run_evaluation.py` — runs the full suite and prints a per-case + summary report.
+
+### Real results from a live run — not cherry-picked
+
+```
+category_accuracy:   88%
+retrieval_hit_rate:  100%
+escalation_accuracy: 75%
+mean_answer_score:   0.88
+pass_rate:           50%
+```
+
+4 of 8 cases failed, for three genuinely different reasons — this is the harness doing its job,
+not the system being unreliable:
+
+1. **`renewal_refund_forgot_to_cancel` and `2fa_lockout_lost_device`** failed on
+   `escalation_correct` — this is the *exact* Module 7 gap already documented: the rule layer
+   catches low-confidence retrieval and fraud keywords, but not "confidently-retrieved answer that
+   still needs case-by-case human judgment." Module 8 turns that one-off observation into a
+   reproducible, named regression the next module can be checked against.
+2. **`stolen_card`** failed on `category_correct` in this run even though it passed in earlier
+   manual runs (Module 5–7) — the classifier's category label for this exact message isn't stable
+   across LLM sampling calls. Escalation was still correct (`immediate`, caught by the keyword
+   check on the raw message, independent of the category label) — a live demonstration of why that
+   defense-in-depth design choice in Module 7 matters.
+3. **`plan_tiers`** failed on `answer_score` (0.5) — the judge correctly caught that the answer
+   listed all three tiers but dropped the "downgrades take effect at end of billing cycle" fact.
+   Not wrong, just incomplete — a distinction only an LLM-as-judge can catch; a keyword-presence
+   check would have likely missed it too since the answer's wording didn't use "downgrade" at all
+   in that phrasing.
+
+### Trying it live
+
+```bash
+cd apps/backend
+python -m scripts.run_evaluation
+```
+
 ### Stack
 
 | Layer      | Technology                              |
@@ -349,6 +414,7 @@ supportiq/
 │       │   ├── agents/      # ClassifierAgent / ResponseAgent
 │       │   ├── workflows/   # LangGraph StateGraph wiring the agents together
 │       │   ├── validation/  # Deterministic escalation rules
+│       │   ├── evaluation/  # Golden eval dataset, LLM-as-judge, evaluation runner
 │       │   └── main.py
 │       ├── alembic/     # Schema migrations
 │       ├── scripts/     # Manual demo/verification/indexing scripts
