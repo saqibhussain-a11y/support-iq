@@ -17,7 +17,8 @@ def configure_tracing(service_name: str = "supportiq-backend") -> None:
     if _configured:
         return
     provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
-    provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+    if get_settings().otel_console_export:
+        provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
     trace.set_tracer_provider(provider)
     _configured = True
 

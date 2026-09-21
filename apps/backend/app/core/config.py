@@ -15,7 +15,7 @@ REPO_ROOT = _find_repo_root()
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(REPO_ROOT / ".env"), extra="ignore")
 
     app_env: str = "development"
     api_host: str = "0.0.0.0"
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://supportiq:supportiq@localhost:5432/supportiq"
 
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
 
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-20b"
@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     langsmith_tracing: bool = False
     langsmith_api_key: str | None = None
     langsmith_project: str = "supportiq"
+
+    otel_console_export: bool = False
 
 
 @lru_cache
