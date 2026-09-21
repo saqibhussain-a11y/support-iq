@@ -561,6 +561,53 @@ dense/sparse counts. LangSmith gives the clean, zero-code, LangGraph-native exec
 OpenTelemetry gives the cost- and retrieval-level detail LangSmith's auto-instrumentation can't
 see. Running both is deliberate, not duplicated effort.
 
+## Module 11 — Frontend (current)
+
+A real UI over `POST /api/tickets`, replacing the Module 1 system-status-only placeholder page.
+Every field the backend now returns — classification, grounded answer, sources, faithfulness
+verdict, escalation level and reasons — is visible, not just the happy path.
+
+- `src/lib/api.ts` — `submitTicket()` plus TypeScript types (`TicketClassification`,
+  `SupportResponse`, `FaithfulnessVerdict`, `TicketResult`) mirroring the backend's Pydantic
+  response models field-for-field, so a schema drift shows up as a type error, not a silent `undefined`.
+- `src/components/ticket-form.tsx` — a textarea + example-message quick-fill buttons (the same
+  messages used to verify Modules 5–10 live) submit to the real API and render the full result:
+  category/priority/sentiment badges, the answer, source documents, an unsupported-claims callout
+  when `faithfulness.is_faithful` is `false`, and an escalation-reasons callout when the ticket
+  was escalated.
+- `src/components/ui/textarea.tsx` — added via the project's existing shadcn setup (base-ui
+  primitives, not Radix — this project's shadcn style differs from typical shadcn scaffolds, per
+  `apps/frontend/AGENTS.md`'s warning to check `node_modules/next/dist/docs/` rather than assume;
+  confirmed by reading the installed Next.js 16 docs directly before writing any component).
+- `src/app/page.tsx` — the ticket form is now the primary feature; system status moved below it
+  as a secondary indicator.
+
+### Tests
+
+12 total frontend tests (8 new): `submitTicket()`'s request/response contract, and `TicketForm`
+covering the disabled-until-typed state, example-message fill, a full successful submission
+(classification badges, answer, sources, auto-resolved badge), the unsupported-claims callout, the
+escalation-reasons callout, and the network-failure error state — all via real DOM rendering and
+event simulation (`@testing-library/react`), not shallow rendering.
+
+**Honest scope note:** verified via `tsc --noEmit` (clean) and the full test suite (12/12
+passing, jsdom-rendered) — I have not opened this in an actual browser myself. Per this project's
+established workflow, you run `npm run dev` yourself; I'm not starting long-lived dev servers.
+
+### Trying it live
+
+```bash
+# terminal 1
+cd apps/backend && uvicorn app.main:app --reload --port 8000
+
+# terminal 2
+cd apps/frontend
+npm install
+npm run dev
+```
+
+Visit http://localhost:3000, type a message (or click one of the example buttons), and submit.
+
 ### Stack
 
 | Layer      | Technology                              |
