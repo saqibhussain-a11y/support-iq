@@ -169,7 +169,7 @@ python -m scripts.query_knowledge_base "Can I get a refund for a duplicate subsc
 Prints the top-K chunks ranked by rerank score, each with its fused (RRF) score, source document,
 and category.
 
-## Module 5 — Customer Support Agents (current)
+## Module 5 — Customer Support Agents
 
 Two focused agents, each a thin, testable layer over the services built in Modules 2–4 — no
 orchestration between them yet, that's Module 6 (LangGraph):
@@ -213,12 +213,67 @@ python -m scripts.demo_agents "I was charged twice for my subscription this mont
 
 Prints the ticket classification, then the grounded response with its sources.
 
+## Module 6 — LangGraph Orchestration (current)
+
+Module 5's two agents had to be called manually, in order, by whatever script wanted them
+(`demo_agents.py` just calls `classify()` then `respond()` back to back). Module 6 replaces that
+manual sequencing with an actual graph: explicit state, explicit nodes, and an explicit
+conditional edge that decides which path a ticket takes.
+
+```text
+START → classify ──► category == "other" ──► clarify ──► END
+                └──► anything else ──────────► respond ──► END
+```
+
+- `app/workflows/schemas.py` — `TicketState` (a `TypedDict`: `message`, `classification`,
+  `response`) is the state LangGraph threads through the graph; each node returns only the keys
+  it changed, and LangGraph merges them in. `WorkflowContext` is a small dataclass
+  (`classifier`, `responder`, `session`) injected into nodes at invoke time via LangGraph's
+  `Runtime[Context]` — dependency injection for graph nodes, so nodes stay pure functions of
+  `(state, runtime)` instead of closing over module-level singletons.
+- `app/workflows/nodes.py` — `classify_node` and `respond_node` just call the Module 5 agents;
+  `clarify_node` returns a canned "please give me more detail" response without touching
+  retrieval or the LLM at all. `route_after_classification` is the conditional: `category ==
+  "other"` → `clarify`, otherwise → `respond`.
+- `app/workflows/graph.py` — `build_support_workflow()` builds and compiles the `StateGraph` once
+  (cached — the graph's structure is static; only the per-request `WorkflowContext` varies).
+- `app/workflows/service.py` — `SupportWorkflowService.run()` is the one call site: builds a
+  `WorkflowContext`, seeds the initial state, and `ainvoke()`s the compiled graph.
+- `app/api/tickets.py` — the first real feature endpoint: `POST /api/tickets` takes
+  `{"message": "..."}` and runs it through the graph, returning both the classification and the
+  grounded response. Added `get_db_session` to `app/db/session.py` as a FastAPI-`Depends`-shaped
+  wrapper around the existing `session_scope()`.
+- **Verified live, not assumed:** running the vague message `"hey"` through the real graph
+  produced the `clarify` answer in ~3.4s total container time — with none of fastembed's or the
+  reranker's ONNX model downloads/loads happening at all. That confirms the conditional edge
+  genuinely short-circuits the expensive retrieval+rerank+LLM path for the `clarify` branch,
+  rather than running it anyway and discarding the result.
+
+Still no validation, quality checks, or human-escalation policy — the routing rule here
+(`category == "other"`) exists only to demonstrate the conditional edge. Real escalation logic is
+Module 7.
+
+### Trying the workflow live
+
+```bash
+cd apps/backend
+python -m scripts.demo_workflow "I was charged twice for my subscription this month and I want a refund."
+```
+
+Or through the API once the backend is running:
+
+```bash
+curl -s http://localhost:8000/api/tickets \
+  -H "Content-Type: application/json" \
+  -d '{"message": "I was charged twice for my subscription this month and I want a refund."}'
+```
+
 ### Stack
 
 | Layer      | Technology                              |
 | ---------- | ---------------------------------------- |
 | Frontend   | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, shadcn/ui |
-| Backend    | FastAPI, Pydantic v2, SQLAlchemy (async), Alembic, Groq SDK, fastembed |
+| Backend    | FastAPI, Pydantic v2, SQLAlchemy (async), Alembic, Groq SDK, fastembed, LangGraph |
 | Database   | PostgreSQL 16 + pgvector                 |
 | Infra      | Docker Compose (Postgres only) — backend and frontend run natively |
 
@@ -239,6 +294,7 @@ supportiq/
 │       │   ├── retrieval/   # dense + sparse search, RRF fusion, RetrievalService
 │       │   ├── reranking/   # Reranker / FastEmbedReranker
 │       │   ├── agents/      # ClassifierAgent / ResponseAgent
+│       │   ├── workflows/   # LangGraph StateGraph wiring the agents together
 │       │   └── main.py
 │       ├── alembic/     # Schema migrations
 │       ├── scripts/     # Manual demo/verification/indexing scripts

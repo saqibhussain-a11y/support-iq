@@ -31,6 +31,11 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+async def get_db_session() -> AsyncIterator[AsyncSession]:
+    async with session_scope() as session:
+        yield session
+
+
 async def ping_database() -> bool:
     engine = get_engine()
     async with engine.connect() as conn:
