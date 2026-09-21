@@ -507,19 +507,66 @@ cd apps/backend
 python -m scripts.demo_tracing "I was charged twice for my subscription this month and I want a refund."
 ```
 
-### LangSmith and Helicone
+### LangSmith
 
-Both need a free account and an API key before I can wire them in and verify traces/logs actually
-show up — same pattern as adding `GROQ_API_KEY` in Module 2. Once `LANGCHAIN_API_KEY` (from
-smith.langchain.com) and `HELICONE_API_KEY` (from helicone.ai) are in `.env`, this section will be
-filled in with the LangGraph-native tracing UI and the Groq-call-level cost/latency proxy.
+Helicone was skipped — its free tier is a 7-day trial only, not worth wiring into a portfolio
+project that gets exercised over months. LangSmith gives LangGraph-native tracing for free and
+needs zero instrumentation code: LangGraph automatically reports every node execution once
+`LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` are present as real process environment
+variables — which they are not, by default, just by sitting in `.env`.
+
+- **The gap this closes:** `pydantic-settings` parses `.env` into our `Settings` object without
+  ever touching `os.environ` (verified directly — set a variable in `.env`, confirmed
+  `"FOO" in os.environ` was `False` even though `Settings().foo` read it correctly). LangSmith's
+  SDK reads `os.environ` directly, so the two would never have talked to each other without an
+  explicit bridge.
+- `app/observability/tracing.py` — `configure_langsmith()` reads the three settings from our
+  `Settings` object (the project's single source of truth for config) and copies them into
+  `os.environ`, only if both tracing is enabled and a key is present. Idempotent, same pattern as
+  `configure_tracing()`.
+- `app/workflows/graph.py` — calls `configure_langsmith()` inside `build_support_workflow()`,
+  which is itself `@lru_cache`d, guaranteeing it runs exactly once, before the graph is ever
+  invoked, from every entry point (API, every demo script) without having to remember to call it
+  separately in each one.
+
+**A real bug I caused and caught before it shipped:** an early version of the test for
+`configure_langsmith()` called the real function, which wrote a fake API key directly into the
+actual process `os.environ` — not through `monkeypatch`, so pytest's automatic teardown never
+reverted it. The full suite ran fine on its own (80 passed), but printed a real `403 Forbidden`
+error from LangSmith's API afterward: later tests that build a real `SupportWorkflowService` had
+inherited the leaked fake key and genuinely tried to phone home with it. Rewrote the test to save
+and manually restore the exact environment variables and the module's internal `_configured` flag
+around every test, and confirmed the warning disappeared. Genuine test-isolation bug, caught by
+watching the full suite's output rather than just its pass/fail count.
+
+**Verified server-side, not just "no exception thrown":** after running the workflow once for
+real, queried the LangSmith API directly for the `supportiq` project and got back a real trace —
+one root `LangGraph` run plus 5 child runs, one per graph node, each correctly parented:
+
+```
+LangGraph                      (root)
+  classify
+  route_after_classification
+  respond
+  check_faithfulness
+  validate
+```
+
+**LangSmith vs. the OpenTelemetry work above — genuinely different, not redundant:** LangSmith's
+automatic instrumentation only sees LangChain/LangGraph `Runnable` objects, so it captures every
+*node*, but not the raw Groq SDK calls inside them (`GroqProvider` calls `groq.AsyncGroq` directly,
+which isn't LangChain-wrapped) — no token counts, no model name, no retrieval internals. The OTel
+spans built earlier in this module are what actually carry model/temperature/token-usage and
+dense/sparse counts. LangSmith gives the clean, zero-code, LangGraph-native execution view;
+OpenTelemetry gives the cost- and retrieval-level detail LangSmith's auto-instrumentation can't
+see. Running both is deliberate, not duplicated effort.
 
 ### Stack
 
 | Layer      | Technology                              |
 | ---------- | ---------------------------------------- |
 | Frontend   | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, shadcn/ui |
-| Backend    | FastAPI, Pydantic v2, SQLAlchemy (async), Alembic, Groq SDK, fastembed, LangGraph, OpenTelemetry |
+| Backend    | FastAPI, Pydantic v2, SQLAlchemy (async), Alembic, Groq SDK, fastembed, LangGraph, OpenTelemetry, LangSmith |
 | Database   | PostgreSQL 16 + pgvector                 |
 | Infra      | Docker Compose (Postgres only) — backend and frontend run natively |
 
@@ -544,7 +591,7 @@ supportiq/
 │       │   ├── validation/  # Deterministic escalation rules
 │       │   ├── evaluation/  # Golden eval dataset, LLM-as-judge, evaluation runner
 │       │   ├── hallucination/  # FaithfulnessChecker (answer vs. retrieved context)
-│       │   ├── observability/  # OpenTelemetry tracing setup
+│       │   ├── observability/  # OpenTelemetry tracing + LangSmith env-var bridging
 │       │   └── main.py
 │       ├── alembic/     # Schema migrations
 │       ├── scripts/     # Manual demo/verification/indexing scripts

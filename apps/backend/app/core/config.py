@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 5
     rrf_k: int = 60
 
+    langsmith_tracing: bool = False
+    langsmith_api_key: str | None = None
+    langsmith_project: str = "supportiq"
+
 
 @lru_cache
 def get_settings() -> Settings:
