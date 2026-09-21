@@ -122,7 +122,7 @@ python -m scripts.index_knowledge_base
 Prints a summary: documents processed, chunks created, chunks embedded, total rows now in the
 table.
 
-## Module 4 — RAG & Hybrid Retrieval (current)
+## Module 4 — RAG & Hybrid Retrieval
 
 Turns a customer's question into the handful of policy chunks actually relevant to it:
 
@@ -169,6 +169,50 @@ python -m scripts.query_knowledge_base "Can I get a refund for a duplicate subsc
 Prints the top-K chunks ranked by rerank score, each with its fused (RRF) score, source document,
 and category.
 
+## Module 5 — Customer Support Agents (current)
+
+Two focused agents, each a thin, testable layer over the services built in Modules 2–4 — no
+orchestration between them yet, that's Module 6 (LangGraph):
+
+```text
+ClassifierAgent:  ticket text  →  LLMService (structured JSON)  →  category/priority/sentiment
+ResponseAgent:    question     →  RetrievalService  →  LLMService (grounded in retrieved chunks)  →  answer + sources
+```
+
+- `app/agents/classifier.py` — `ClassifierAgent` formalizes what Module 2's `demo_llm.py` did
+  ad hoc: classifies an incoming message into `category` / `priority` / `sentiment` via
+  `LLMService.complete_structured()`. The schema now uses `Literal` types
+  (`app/agents/schemas.py`) instead of the demo's plain `str` fields, so an out-of-vocabulary
+  value from the model fails validation loudly instead of silently passing through.
+- `app/agents/response.py` — `ResponseAgent` is the "Response Agent" foreshadowed in Module 4: it
+  calls `RetrievalService.search()` to get the top-K chunks, builds a context block from them, and
+  asks the LLM to answer **using only that context**. The system prompt (`app/agents/prompts.py`)
+  explicitly instructs the model to say it doesn't know rather than guess.
+- **Sources are computed from retrieval results, not asked of the LLM.** The model never invents
+  which documents it used — `sources` is just the deduplicated, sorted list of `document` values
+  from the chunks that were actually retrieved. This removes an entire class of citation
+  hallucination by construction.
+- **Honest limitation, found via live verification, not assumed:** `SupportResponse.grounded` is
+  `True` whenever retrieval returns *any* candidates — RRF + reranking always return the top-K by
+  rank, with no relevance floor, even if none of them are actually relevant. Asking a real,
+  out-of-scope question ("What is the capital of France?") returned `grounded=True` with sources
+  from unrelated docs, yet the LLM still correctly refused to answer using irrelevant context,
+  because that refusal is enforced by the prompt, not by the `grounded` flag. Real groundedness /
+  hallucination detection (checking that the answer is actually *supported* by the context, not
+  just that context existed) is Module 9's job — `grounded` here only means "retrieval ran and
+  found candidates."
+- `app/agents/dependencies.py` — `get_classifier_agent()` / `get_response_agent()`, same DI pattern
+  as every other module.
+
+### Trying the agents live
+
+```bash
+cd apps/backend
+python -m scripts.demo_agents "I was charged twice for my subscription this month and I want a refund."
+```
+
+Prints the ticket classification, then the grounded response with its sources.
+
 ### Stack
 
 | Layer      | Technology                              |
@@ -194,6 +238,7 @@ supportiq/
 │       │   ├── knowledge/   # loader / chunker / indexer for knowledge_base/
 │       │   ├── retrieval/   # dense + sparse search, RRF fusion, RetrievalService
 │       │   ├── reranking/   # Reranker / FastEmbedReranker
+│       │   ├── agents/      # ClassifierAgent / ResponseAgent
 │       │   └── main.py
 │       ├── alembic/     # Schema migrations
 │       ├── scripts/     # Manual demo/verification/indexing scripts
