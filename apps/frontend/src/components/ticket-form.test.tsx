@@ -28,6 +28,13 @@ function baseResult(overrides: Partial<TicketResult> = {}): TicketResult {
   };
 }
 
+function submit(message: string) {
+  fireEvent.change(screen.getByLabelText("Describe your issue"), {
+    target: { value: message },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+}
+
 describe("TicketForm", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -36,13 +43,13 @@ describe("TicketForm", () => {
   it("disables submit until a message is entered", () => {
     render(<TicketForm />);
 
-    expect(screen.getByRole("button", { name: "Submit ticket" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Describe your issue"), {
       target: { value: "I was charged twice" },
     });
 
-    expect(screen.getByRole("button", { name: "Submit ticket" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
   });
 
   it("filling an example message populates the textarea", () => {
@@ -59,16 +66,14 @@ describe("TicketForm", () => {
     stubFetchResolving(baseResult());
     render(<TicketForm />);
 
-    fireEvent.change(screen.getByLabelText("Describe your issue"), {
-      target: { value: "I was charged twice" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Submit ticket" }));
+    submit("I was charged twice");
 
     expect(await screen.findByText("You're eligible for a refund.")).toBeInTheDocument();
     expect(screen.getByText("billing")).toBeInTheDocument();
     expect(screen.getByText("high priority")).toBeInTheDocument();
-    expect(screen.getByText("refund_policy.md")).toBeInTheDocument();
-    expect(screen.getByText("Auto-resolved")).toBeInTheDocument();
+    expect(screen.getByText("frustrated")).toBeInTheDocument();
+    expect(screen.getByText(/refund_policy\.md/)).toBeInTheDocument();
+    expect(screen.getByText("Resolved automatically")).toBeInTheDocument();
   });
 
   it("shows unsupported claims when the answer is not faithful", async () => {
@@ -79,15 +84,12 @@ describe("TicketForm", () => {
     );
     render(<TicketForm />);
 
-    fireEvent.change(screen.getByLabelText("Describe your issue"), {
-      target: { value: "I was charged twice" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Submit ticket" }));
+    submit("I was charged twice");
 
-    expect(await screen.findByText("a fabricated 60-day window")).toBeInTheDocument();
+    expect(await screen.findByText(/a fabricated 60-day window/)).toBeInTheDocument();
   });
 
-  it("shows escalation reasons when the ticket was escalated", async () => {
+  it("shows escalation status and reasons when the ticket was escalated", async () => {
     stubFetchResolving(
       baseResult({
         escalation: "immediate",
@@ -96,12 +98,9 @@ describe("TicketForm", () => {
     );
     render(<TicketForm />);
 
-    fireEvent.change(screen.getByLabelText("Describe your issue"), {
-      target: { value: "someone stole my card" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Submit ticket" }));
+    submit("someone stole my card");
 
-    expect(await screen.findByText("Escalated: immediate")).toBeInTheDocument();
+    expect(await screen.findByText("Escalated immediately")).toBeInTheDocument();
     expect(screen.getByText("message mentions a stolen payment method")).toBeInTheDocument();
   });
 
@@ -109,13 +108,10 @@ describe("TicketForm", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network error")));
     render(<TicketForm />);
 
-    fireEvent.change(screen.getByLabelText("Describe your issue"), {
-      target: { value: "I was charged twice" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Submit ticket" }));
+    submit("I was charged twice");
 
     expect(
-      await screen.findByText(/Something went wrong reaching the support API/),
+      await screen.findByText(/Couldn't reach the support API/),
     ).toBeInTheDocument();
   });
 });

@@ -23,7 +23,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-muted/30">
+        <header className="border-b border-border bg-background">
+          <div className="mx-auto flex h-14 w-full max-w-3xl items-center px-6">
+            <span className="text-sm font-semibold tracking-tight">SupportIQ</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              AI Customer Support Intelligence Platform
+            </span>
+          </div>
+        </header>
+        {children}
+      </body>
     </html>
   );
 }
