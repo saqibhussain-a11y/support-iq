@@ -25,6 +25,14 @@ def route_after_classification(state: TicketState) -> str:
     return "clarify" if state["classification"].category == "other" else "respond"
 
 
+async def check_faithfulness_node(state: TicketState, runtime: Runtime[WorkflowContext]) -> dict:
+    response = state["response"]
+    verdict = await runtime.context.faithfulness_checker.check(response.answer, response.context)
+    return {"faithfulness": verdict}
+
+
 async def validate_node(state: TicketState) -> dict:
-    result = evaluate(state["message"], state["classification"], state["response"])
+    result = evaluate(
+        state["message"], state["classification"], state["response"], state["faithfulness"]
+    )
     return {"escalation": result.escalation, "escalation_reasons": result.reasons}

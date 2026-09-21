@@ -54,6 +54,7 @@ async def test_respond_grounds_answer_in_retrieved_context():
     assert result.sources == ["refund_policy.md"]
     assert result.grounded is True
     assert result.top_rerank_score == 1.0
+    assert "Duplicate charges are always refundable." in result.context
     assert "Duplicate charges are always refundable." in provider.received_messages[-1].content
 
 
@@ -69,6 +70,7 @@ async def test_respond_returns_fallback_when_no_chunks_found():
     assert result.grounded is False
     assert result.sources == []
     assert result.top_rerank_score is None
+    assert result.context == ""
     assert provider.received_messages is None
 
 

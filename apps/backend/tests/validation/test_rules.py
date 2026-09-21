@@ -1,4 +1,5 @@
 from app.agents.schemas import SupportResponse, TicketClassification
+from app.hallucination.schemas import FaithfulnessVerdict
 from app.validation.rules import evaluate
 from app.validation.schemas import EscalationLevel
 
@@ -85,3 +86,37 @@ def test_empty_answer_escalates_for_review():
 
     assert result.escalation == EscalationLevel.REVIEW
     assert "empty" in result.reasons[0]
+
+
+def test_unfaithful_answer_escalates_for_review():
+    result = evaluate(
+        "I was charged twice",
+        make_classification(),
+        make_response(),
+        FaithfulnessVerdict(is_faithful=False, unsupported_claims=["invented a 60-day window"]),
+    )
+
+    assert result.escalation == EscalationLevel.REVIEW
+    assert "60-day window" in result.reasons[0]
+
+
+def test_faithful_answer_does_not_escalate():
+    result = evaluate(
+        "I was charged twice",
+        make_classification(),
+        make_response(),
+        FaithfulnessVerdict(is_faithful=True, unsupported_claims=[]),
+    )
+
+    assert result.escalation == EscalationLevel.NONE
+
+
+def test_fraud_keyword_takes_priority_over_faithfulness_check():
+    result = evaluate(
+        "I think someone stole my card",
+        make_classification(category="account"),
+        make_response(),
+        FaithfulnessVerdict(is_faithful=False, unsupported_claims=["irrelevant"]),
+    )
+
+    assert result.escalation == EscalationLevel.IMMEDIATE

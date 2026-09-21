@@ -20,6 +20,13 @@ async def main() -> None:
     print(f"  sources:  {result['response'].sources}")
     print(f"  answer:   {result['response'].answer}")
     print()
+    print("Faithfulness:")
+    if result["faithfulness"] is None:
+        print("  skipped (not a grounded answer)")
+    else:
+        print(f"  is_faithful:        {result['faithfulness'].is_faithful}")
+        print(f"  unsupported_claims: {result['faithfulness'].unsupported_claims}")
+    print()
     print("Escalation:")
     print(f"  level:   {result['escalation'].value}")
     print(f"  reasons: {result['escalation_reasons']}")

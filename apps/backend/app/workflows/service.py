@@ -2,22 +2,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.classifier import ClassifierAgent
 from app.agents.response import ResponseAgent
+from app.hallucination.checker import FaithfulnessChecker
 from app.workflows.graph import build_support_workflow
 from app.workflows.schemas import TicketState, WorkflowContext
 
 
 class SupportWorkflowService:
-    def __init__(self, classifier: ClassifierAgent, responder: ResponseAgent) -> None:
+    def __init__(
+        self,
+        classifier: ClassifierAgent,
+        responder: ResponseAgent,
+        faithfulness_checker: FaithfulnessChecker,
+    ) -> None:
         self._classifier = classifier
         self._responder = responder
+        self._faithfulness_checker = faithfulness_checker
         self._graph = build_support_workflow()
 
     async def run(self, session: AsyncSession, message: str) -> TicketState:
-        context = WorkflowContext(classifier=self._classifier, responder=self._responder, session=session)
+        context = WorkflowContext(
+            classifier=self._classifier,
+            responder=self._responder,
+            faithfulness_checker=self._faithfulness_checker,
+            session=session,
+        )
         initial_state: TicketState = {
             "message": message,
             "classification": None,
             "response": None,
+            "faithfulness": None,
             "escalation": None,
             "escalation_reasons": [],
         }

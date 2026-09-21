@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.schemas import SupportResponse, TicketClassification
 from app.db.session import get_db_session
+from app.hallucination.schemas import FaithfulnessVerdict
 from app.validation.schemas import EscalationLevel
 from app.workflows.dependencies import get_support_workflow_service
 from app.workflows.service import SupportWorkflowService
@@ -18,6 +19,7 @@ class TicketRequest(BaseModel):
 class TicketResult(BaseModel):
     classification: TicketClassification
     response: SupportResponse
+    faithfulness: FaithfulnessVerdict | None
     escalation: EscalationLevel
     escalation_reasons: list[str]
 
@@ -32,6 +34,7 @@ async def create_ticket(
     return TicketResult(
         classification=result["classification"],
         response=result["response"],
+        faithfulness=result["faithfulness"],
         escalation=result["escalation"],
         escalation_reasons=result["escalation_reasons"],
     )

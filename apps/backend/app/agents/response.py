@@ -35,4 +35,5 @@ class ResponseAgent:
             sources=sources,
             grounded=True,
             top_rerank_score=top_rerank_score,
+            context=context_block,
         )

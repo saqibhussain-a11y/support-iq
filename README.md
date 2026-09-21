@@ -321,7 +321,7 @@ python -m scripts.demo_workflow "I think someone stole my card"
 
 Prints classification, response, and now escalation level + reasons.
 
-## Module 8 — Evaluation (current)
+## Module 8 — Evaluation
 
 Every module so far has been checked by hand-picking one or two example messages and reading the
 output. That doesn't scale, and it doesn't produce a number you can track over time. Module 8
@@ -386,6 +386,57 @@ cd apps/backend
 python -m scripts.run_evaluation
 ```
 
+## Module 9 — Hallucination Detection (current)
+
+Module 8's LLM-as-judge only works at eval time, because it needs a hand-written list of
+"expected facts" to compare against. In production there's no such list — the system needs to
+check, on *every real request*, whether the answer it just generated is actually supported by the
+context it was given, using nothing but that context.
+
+```text
+respond → check_faithfulness (context vs. answer) → validate (now also considers faithfulness) → END
+```
+
+- `app/hallucination/checker.py` — `FaithfulnessChecker`, a fourth distinct reuse of
+  `LLMService.complete_structured()` (classification, judging, now faithfulness-checking). Given
+  the exact context block the `ResponseAgent` sent to the LLM and the answer it produced, it asks
+  a second, separate LLM call to name any claim in the answer that isn't directly supported by
+  that context.
+- `app/agents/schemas.py` — `SupportResponse` now also carries `context: str`, the raw context
+  block actually used to generate the answer. This matters: checking faithfulness against a fresh
+  retrieval call would check the wrong thing if retrieval is non-deterministic, and would waste a
+  second retrieval+rerank pass either way. The check has to run against exactly what the LLM saw.
+- `app/workflows/nodes.py`/`graph.py` — new `check_faithfulness_node`, wired only into the
+  `respond` path (`respond → check_faithfulness → validate`); `clarify` skips straight to
+  `validate` since there's no grounded answer to check.
+- `app/validation/rules.py` — `evaluate()` now takes an optional `FaithfulnessVerdict` and
+  escalates to `review` when `is_faithful` is `False`, folding hallucination detection into the
+  same deterministic escalation decision Module 7 built, rather than adding a second, separate
+  gate.
+
+### Verified live, not just unit-tested
+
+A real grounded answer to the duplicate-charge question came back `is_faithful: True` with no
+flagged claims — the expected result on a correct answer. To actually test the checker's
+sensitivity (rather than just its JSON parsing), I fed it a real retrieved context block plus a
+**deliberately fabricated** answer — a wrong 60-day window and an invented "15% loyalty discount"
+neither of which appear anywhere in the source docs:
+
+```
+is_faithful: False
+unsupported_claims: ['You have 60 days to request a refund', 'we also offer a 15% loyalty discount on your next purchase as compensation']
+```
+
+It flagged both fabrications and correctly left the one true claim in that same answer
+("duplicate charges are refundable in full") alone.
+
+### Trying it live
+
+```bash
+cd apps/backend
+python -m scripts.demo_workflow "I was charged twice for my subscription this month and I want a refund."
+```
+
 ### Stack
 
 | Layer      | Technology                              |
@@ -415,6 +466,7 @@ supportiq/
 │       │   ├── workflows/   # LangGraph StateGraph wiring the agents together
 │       │   ├── validation/  # Deterministic escalation rules
 │       │   ├── evaluation/  # Golden eval dataset, LLM-as-judge, evaluation runner
+│       │   ├── hallucination/  # FaithfulnessChecker (answer vs. retrieved context)
 │       │   └── main.py
 │       ├── alembic/     # Schema migrations
 │       ├── scripts/     # Manual demo/verification/indexing scripts
