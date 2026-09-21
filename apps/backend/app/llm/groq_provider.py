@@ -1,10 +1,12 @@
 from collections.abc import AsyncIterator
 
 import groq
+from opentelemetry.trace import Status, StatusCode
 
 from app.llm.exceptions import LLMError
 from app.llm.provider import ModelProvider
 from app.llm.schemas import ChatMessage, LLMResponse, TokenUsage
+from app.observability.tracing import get_tracer
 
 
 class GroqProvider(ModelProvider):
@@ -39,13 +41,24 @@ class GroqProvider(ModelProvider):
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
-        try:
-            response = await self._client.chat.completions.create(**kwargs)
-        except groq.GroqError as exc:
-            raise LLMError(str(exc)) from exc
+        with get_tracer().start_as_current_span("groq.chat.completions") as span:
+            span.set_attribute("llm.model", self._model)
+            span.set_attribute("llm.temperature", temperature)
+            span.set_attribute("llm.json_mode", json_mode)
+            try:
+                response = await self._client.chat.completions.create(**kwargs)
+            except groq.GroqError as exc:
+                span.set_status(Status(StatusCode.ERROR, str(exc)))
+                raise LLMError(str(exc)) from exc
 
-        choice = response.choices[0]
-        usage = response.usage
+            choice = response.choices[0]
+            usage = response.usage
+            span.set_attribute("llm.finish_reason", choice.finish_reason)
+            if usage:
+                span.set_attribute("llm.usage.prompt_tokens", usage.prompt_tokens)
+                span.set_attribute("llm.usage.completion_tokens", usage.completion_tokens)
+                span.set_attribute("llm.usage.total_tokens", usage.total_tokens)
+
         return LLMResponse(
             content=choice.message.content or "",
             model=response.model,

@@ -437,12 +437,89 @@ cd apps/backend
 python -m scripts.demo_workflow "I was charged twice for my subscription this month and I want a refund."
 ```
 
+## Module 10 — Observability (current)
+
+Every module so far has been verified by reading a script's printed output. That tells you *what*
+happened but not *where the time and tokens went* inside a single request that touches five LLM
+calls, two search strategies, and a rerank step. Module 10 adds distributed tracing so a single
+request becomes an inspectable tree of spans instead of one opaque wall-clock number.
+
+```text
+POST /api/tickets (root span, via FastAPIInstrumentor)
+  workflow.classify
+    groq.chat.completions
+  workflow.respond
+    retrieval.search
+    groq.chat.completions
+  workflow.check_faithfulness
+    groq.chat.completions
+  workflow.validate
+```
+
+- `app/observability/tracing.py` — `configure_tracing()` sets up one process-wide `TracerProvider`
+  (idempotent — safe to call from `main.py` and every script); `get_tracer()` is what every other
+  module calls to open a span.
+- `app/main.py` — `FastAPIInstrumentor.instrument_app(app)` gives every HTTP request an automatic
+  root span with method, route, and status code, with no per-endpoint code needed.
+- `app/workflows/nodes.py` — every graph node opens a span with node-specific attributes
+  (classification labels, escalation level, faithfulness verdict).
+- `app/llm/groq_provider.py` — every Groq call is a span with model, temperature, finish reason,
+  and **token usage** — the single most useful attribute for tracking cost per request.
+- `app/retrieval/service.py` — one span per `RetrievalService.search()` call with dense/sparse/
+  candidate counts and the winning rerank score.
+- `scripts/demo_tracing.py` — runs one ticket through the real workflow with an in-memory exporter
+  and prints the resulting span tree with durations, instead of raw JSON console output.
+
+### A real finding, surfaced by tracing, not visible in any prior module
+
+```
+workflow.respond  (38864.7ms)
+  retrieval.search  (37403.1ms)
+      retrieval.dense_count = 20
+      retrieval.sparse_count = 0
+      retrieval.candidate_count = 20
+```
+
+`retrieval.sparse_count` is **0** — full-text search contributed nothing to this request, for a
+completely ordinary billing question. This has quietly been true since Module 4: Postgres's
+`plainto_tsquery()` ANDs every word in the query together by default, so a full natural-language
+sentence ("I was charged twice for my subscription this month and I want a refund.") almost never
+matches any row that doesn't contain every one of those words. Retrieval quality survived because
+dense search alone was carrying every query in every prior module's manual testing — nobody had
+ever measured or printed the dense/sparse split before this module added the counters. This is
+exactly what tracing is for: it turned an invisible, six-module-old inefficiency into a specific,
+attributable number instead of a vibe. I'm documenting it here rather than fixing it — that's a
+Module 4 retrieval-quality fix (e.g. switching to `websearch_to_tsquery` or OR-ing terms), out of
+scope for an observability module, but now it's a tracked, reproducible finding instead of an
+unknown unknown.
+
+### Tests
+
+4 new tests: tracing idempotency and span/attribute/trace-id emission via `InMemorySpanExporter`,
+plus a real assertion that hitting `/health` through the actual `app.main.app` (via
+`ASGITransport`, proven live to behave identically to a real socket-served request for ASGI
+middleware purposes) produces a genuine HTTP server span with the right route and status code.
+
+### Trying it live
+
+```bash
+cd apps/backend
+python -m scripts.demo_tracing "I was charged twice for my subscription this month and I want a refund."
+```
+
+### LangSmith and Helicone
+
+Both need a free account and an API key before I can wire them in and verify traces/logs actually
+show up — same pattern as adding `GROQ_API_KEY` in Module 2. Once `LANGCHAIN_API_KEY` (from
+smith.langchain.com) and `HELICONE_API_KEY` (from helicone.ai) are in `.env`, this section will be
+filled in with the LangGraph-native tracing UI and the Groq-call-level cost/latency proxy.
+
 ### Stack
 
 | Layer      | Technology                              |
 | ---------- | ---------------------------------------- |
 | Frontend   | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, shadcn/ui |
-| Backend    | FastAPI, Pydantic v2, SQLAlchemy (async), Alembic, Groq SDK, fastembed, LangGraph |
+| Backend    | FastAPI, Pydantic v2, SQLAlchemy (async), Alembic, Groq SDK, fastembed, LangGraph, OpenTelemetry |
 | Database   | PostgreSQL 16 + pgvector                 |
 | Infra      | Docker Compose (Postgres only) — backend and frontend run natively |
 
@@ -467,6 +544,7 @@ supportiq/
 │       │   ├── validation/  # Deterministic escalation rules
 │       │   ├── evaluation/  # Golden eval dataset, LLM-as-judge, evaluation runner
 │       │   ├── hallucination/  # FaithfulnessChecker (answer vs. retrieved context)
+│       │   ├── observability/  # OpenTelemetry tracing setup
 │       │   └── main.py
 │       ├── alembic/     # Schema migrations
 │       ├── scripts/     # Manual demo/verification/indexing scripts
