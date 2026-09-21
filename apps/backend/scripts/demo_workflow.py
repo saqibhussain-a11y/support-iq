@@ -19,6 +19,10 @@ async def main() -> None:
     print(f"  grounded: {result['response'].grounded}")
     print(f"  sources:  {result['response'].sources}")
     print(f"  answer:   {result['response'].answer}")
+    print()
+    print("Escalation:")
+    print(f"  level:   {result['escalation'].value}")
+    print(f"  reasons: {result['escalation_reasons']}")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from httpx import ASGITransport, AsyncClient
 from app.agents.schemas import SupportResponse, TicketClassification
 from app.db.session import get_db_session
 from app.main import app
+from app.validation.schemas import EscalationLevel
 from app.workflows.dependencies import get_support_workflow_service
 
 
@@ -14,7 +15,14 @@ class FakeWorkflowService:
             "classification": TicketClassification(
                 category="billing", priority="high", sentiment="frustrated"
             ),
-            "response": SupportResponse(answer="You're eligible for a refund.", sources=["doc.md"], grounded=True),
+            "response": SupportResponse(
+                answer="You're eligible for a refund.",
+                sources=["doc.md"],
+                grounded=True,
+                top_rerank_score=5.9,
+            ),
+            "escalation": EscalationLevel.NONE,
+            "escalation_reasons": [],
         }
 
 
@@ -39,3 +47,5 @@ async def test_create_ticket_returns_classification_and_response():
     assert body["classification"] == {"category": "billing", "priority": "high", "sentiment": "frustrated"}
     assert body["response"]["sources"] == ["doc.md"]
     assert body["response"]["grounded"] is True
+    assert body["escalation"] == "none"
+    assert body["escalation_reasons"] == []

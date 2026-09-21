@@ -13,3 +13,4 @@ class SupportResponse(BaseModel):
     answer: str
     sources: list[str]
     grounded: bool
+    top_rerank_score: float | None = None

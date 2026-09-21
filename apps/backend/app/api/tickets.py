@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.schemas import SupportResponse, TicketClassification
 from app.db.session import get_db_session
+from app.validation.schemas import EscalationLevel
 from app.workflows.dependencies import get_support_workflow_service
 from app.workflows.service import SupportWorkflowService
 
@@ -17,6 +18,8 @@ class TicketRequest(BaseModel):
 class TicketResult(BaseModel):
     classification: TicketClassification
     response: SupportResponse
+    escalation: EscalationLevel
+    escalation_reasons: list[str]
 
 
 @router.post("/tickets", response_model=TicketResult)
@@ -26,4 +29,9 @@ async def create_ticket(
     workflow: SupportWorkflowService = Depends(get_support_workflow_service),
 ) -> TicketResult:
     result = await workflow.run(session, request.message)
-    return TicketResult(classification=result["classification"], response=result["response"])
+    return TicketResult(
+        classification=result["classification"],
+        response=result["response"],
+        escalation=result["escalation"],
+        escalation_reasons=result["escalation_reasons"],
+    )

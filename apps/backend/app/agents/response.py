@@ -29,4 +29,10 @@ class ResponseAgent:
         ]
         llm_response = await self._llm_service.complete(messages, temperature=0.2)
         sources = sorted({chunk.document for chunk in retrieval.chunks})
-        return SupportResponse(answer=llm_response.content, sources=sources, grounded=True)
+        top_rerank_score = max(chunk.rerank_score for chunk in retrieval.chunks)
+        return SupportResponse(
+            answer=llm_response.content,
+            sources=sources,
+            grounded=True,
+            top_rerank_score=top_rerank_score,
+        )

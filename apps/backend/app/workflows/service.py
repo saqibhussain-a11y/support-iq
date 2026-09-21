@@ -14,5 +14,11 @@ class SupportWorkflowService:
 
     async def run(self, session: AsyncSession, message: str) -> TicketState:
         context = WorkflowContext(classifier=self._classifier, responder=self._responder, session=session)
-        initial_state: TicketState = {"message": message, "classification": None, "response": None}
+        initial_state: TicketState = {
+            "message": message,
+            "classification": None,
+            "response": None,
+            "escalation": None,
+            "escalation_reasons": [],
+        }
         return await self._graph.ainvoke(initial_state, context=context)

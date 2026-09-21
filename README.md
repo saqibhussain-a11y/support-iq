@@ -213,7 +213,7 @@ python -m scripts.demo_agents "I was charged twice for my subscription this mont
 
 Prints the ticket classification, then the grounded response with its sources.
 
-## Module 6 — LangGraph Orchestration (current)
+## Module 6 — LangGraph Orchestration
 
 Module 5's two agents had to be called manually, in order, by whatever script wanted them
 (`demo_agents.py` just calls `classify()` then `respond()` back to back). Module 6 replaces that
@@ -268,6 +268,59 @@ curl -s http://localhost:8000/api/tickets \
   -d '{"message": "I was charged twice for my subscription this month and I want a refund."}'
 ```
 
+## Module 7 — Validation & Escalation (current)
+
+A deterministic rule layer sits between the LLM's answer and the customer, deciding whether a
+human needs to see this ticket before (or instead of) the automated response going out. This is
+plain Python `if`/`in` logic, not another LLM call — the point is an auditable, unit-testable
+safety net over LLM output, not a second opinion from the same kind of model that could fail the
+same way.
+
+```text
+respond/clarify → validate (deterministic rules) → escalation: none | review | immediate
+```
+
+- `app/validation/rules.py` — `evaluate()`, built directly from the three tiers documented in
+  `knowledge_base/support/escalation_policy.md`:
+  - **immediate** — the raw customer message contains fraud/unauthorized-access/stolen-payment
+    language. Checked against the *message itself*, not the LLM's `category` classification — so
+    a misclassified ticket (e.g. the classifier calls it `"other"`) still gets caught. Verified
+    live: this exact case happened during testing, and the keyword check caught it anyway.
+  - **review** — a high-priority billing dispute where retrieval's confidence was low, using
+    `SupportResponse.top_rerank_score` (see below) rather than the old boolean `grounded` flag.
+  - **none** — everything else resolves automatically.
+- `app/agents/schemas.py` / `app/agents/response.py` — added `SupportResponse.top_rerank_score`
+  (the best cross-encoder score among the retrieved chunks). This replaces `grounded` as the
+  input to confidence-based rules: `grounded` only means "retrieval returned candidates,"
+  regardless of relevance (the exact gap flagged in Modules 5–6); `top_rerank_score` is a real
+  number that empirically separates the cases. Verified against real retrieval output before
+  picking a threshold: a genuinely relevant top match scored 5.9 and 2.6 on two real queries, an
+  irrelevant one ("What is the capital of France?") scored **-11.2** — a threshold of `0.0` cleanly
+  separates them on real data, not a guessed constant.
+- `app/workflows/nodes.py` — new `validate_node`, wired in after both `respond` and `clarify`
+  (`app/workflows/graph.py`), so every path through the graph gets checked, including the
+  cheap `clarify` path.
+
+**Real limitation, found live, not patched over:** running the exact "renewal refund I forgot to
+cancel in time" example from `escalation_policy.md` — which the doc itself calls out as needing
+human judgment — returned `escalation: none`. Retrieval was confident (`top_rerank_score` 2.64,
+genuinely the right documents), so the low-confidence rule correctly didn't fire; but "confident,
+well-grounded retrieval" and "this is a case-by-case judgment call" are different problems, and
+this rule layer only detects the first one. I'm not patching this with a rule fitted to one
+example — that would just be overfitting to a single sentence, not a real fix. Actually
+distinguishing "the docs answer this clearly" from "this requires case-by-case judgment" needs
+either a real quality signal (Module 8, Evaluation) or a self-critique step (Module 9,
+hallucination detection), not more keyword lists.
+
+### Trying it live
+
+```bash
+cd apps/backend
+python -m scripts.demo_workflow "I think someone stole my card"
+```
+
+Prints classification, response, and now escalation level + reasons.
+
 ### Stack
 
 | Layer      | Technology                              |
@@ -295,6 +348,7 @@ supportiq/
 │       │   ├── reranking/   # Reranker / FastEmbedReranker
 │       │   ├── agents/      # ClassifierAgent / ResponseAgent
 │       │   ├── workflows/   # LangGraph StateGraph wiring the agents together
+│       │   ├── validation/  # Deterministic escalation rules
 │       │   └── main.py
 │       ├── alembic/     # Schema migrations
 │       ├── scripts/     # Manual demo/verification/indexing scripts
