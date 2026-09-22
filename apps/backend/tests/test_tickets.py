@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -27,6 +29,19 @@ class FakeWorkflowService:
             "escalation_reasons": [],
         }
 
+    async def run_stream(self, session, message: str):
+        result = await self.run(session, message)
+        for stage in ("classify", "respond", "check_faithfulness", "validate"):
+            update = {key: result[key] for key in result if key in FakeWorkflowService._STAGE_KEYS[stage]}
+            yield stage, update
+
+    _STAGE_KEYS = {
+        "classify": {"classification"},
+        "respond": {"response"},
+        "check_faithfulness": {"faithfulness"},
+        "validate": {"escalation", "escalation_reasons"},
+    }
+
 
 async def fake_db_session():
     yield object()
@@ -52,3 +67,35 @@ async def test_create_ticket_returns_classification_and_response():
     assert body["faithfulness"]["is_faithful"] is True
     assert body["escalation"] == "none"
     assert body["escalation_reasons"] == []
+
+
+@pytest.mark.asyncio
+async def test_stream_ticket_emits_stage_events_then_result():
+    app.dependency_overrides[get_db_session] = fake_db_session
+    app.dependency_overrides[get_support_workflow_service] = lambda: FakeWorkflowService()
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with client.stream(
+                "POST", "/api/tickets/stream", json={"message": "I was charged twice"}
+            ) as response:
+                assert response.status_code == 200
+                body = await response.aread()
+    finally:
+        app.dependency_overrides.clear()
+
+    events = [chunk for chunk in body.decode().split("\n\n") if chunk]
+    stage_events = [e for e in events if e.startswith("event: stage")]
+    result_events = [e for e in events if e.startswith("event: result")]
+
+    assert [json.loads(e.split("data: ", 1)[1])["stage"] for e in stage_events] == [
+        "classify",
+        "respond",
+        "check_faithfulness",
+        "validate",
+    ]
+    assert len(result_events) == 1
+    result_body = json.loads(result_events[0].split("data: ", 1)[1])
+    assert result_body["classification"]["category"] == "billing"
+    assert result_body["escalation"] == "none"

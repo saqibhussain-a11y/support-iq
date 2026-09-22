@@ -44,3 +44,52 @@ export async function submitTicket(message: string): Promise<TicketResult> {
   if (!res.ok) throw new Error(`Ticket submission failed: ${res.status}`);
   return res.json();
 }
+
+export type PipelineStage = "classify" | "respond" | "clarify" | "check_faithfulness" | "validate";
+
+export type StreamEvent =
+  | { type: "stage"; stage: PipelineStage }
+  | { type: "result"; result: TicketResult };
+
+export async function* streamTicket(message: string): AsyncGenerator<StreamEvent> {
+  const res = await fetch(`${getApiUrl()}/api/tickets/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+    cache: "no-store",
+  });
+  if (!res.ok || !res.body) throw new Error(`Ticket submission failed: ${res.status}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let separatorIndex = buffer.indexOf("\n\n");
+    while (separatorIndex !== -1) {
+      const event = parseSseEvent(buffer.slice(0, separatorIndex));
+      buffer = buffer.slice(separatorIndex + 2);
+      if (event) yield event;
+      separatorIndex = buffer.indexOf("\n\n");
+    }
+  }
+}
+
+function parseSseEvent(raw: string): StreamEvent | null {
+  let eventType = "";
+  let data = "";
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("event:")) eventType = line.slice("event:".length).trim();
+    else if (line.startsWith("data:")) data += line.slice("data:".length).trim();
+  }
+  if (!data) return null;
+
+  const payload = JSON.parse(data);
+  if (eventType === "stage") return { type: "stage", stage: payload.stage as PipelineStage };
+  if (eventType === "result") return { type: "result", result: payload as TicketResult };
+  return null;
+}

@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.classifier import ClassifierAgent
@@ -19,7 +21,7 @@ class SupportWorkflowService:
         self._faithfulness_checker = faithfulness_checker
         self._graph = build_support_workflow()
 
-    async def run(self, session: AsyncSession, message: str) -> TicketState:
+    def _new_run(self, session: AsyncSession, message: str) -> tuple[WorkflowContext, TicketState]:
         context = WorkflowContext(
             classifier=self._classifier,
             responder=self._responder,
@@ -34,4 +36,14 @@ class SupportWorkflowService:
             "escalation": None,
             "escalation_reasons": [],
         }
+        return context, initial_state
+
+    async def run(self, session: AsyncSession, message: str) -> TicketState:
+        context, initial_state = self._new_run(session, message)
         return await self._graph.ainvoke(initial_state, context=context)
+
+    async def run_stream(self, session: AsyncSession, message: str) -> AsyncIterator[tuple[str, dict]]:
+        context, initial_state = self._new_run(session, message)
+        async for chunk in self._graph.astream(initial_state, context=context, stream_mode="updates"):
+            for node_name, update in chunk.items():
+                yield node_name, update

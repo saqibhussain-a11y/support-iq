@@ -25,7 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-muted/30">
         <header className="border-b border-border bg-background">
-          <div className="mx-auto flex h-14 w-full max-w-3xl items-center px-6">
+          <div className="mx-auto flex h-14 w-full max-w-4xl items-center px-6">
             <span className="text-sm font-semibold tracking-tight">SupportIQ</span>
             <span className="ml-auto text-xs text-muted-foreground">
               AI Customer Support Intelligence Platform

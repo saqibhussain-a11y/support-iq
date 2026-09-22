@@ -1,13 +1,29 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { TicketResult } from "@/lib/api";
+import type { PipelineStage, TicketResult } from "@/lib/api";
 import { TicketForm } from "./ticket-form";
 
-function stubFetchResolving(result: TicketResult) {
+const DEFAULT_STAGES: PipelineStage[] = ["classify", "respond", "check_faithfulness", "validate"];
+
+function buildSseStream(stages: PipelineStage[], result: TicketResult): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const chunks = [
+    ...stages.map((stage) => `event: stage\ndata: ${JSON.stringify({ stage })}\n\n`),
+    `event: result\ndata: ${JSON.stringify(result)}\n\n`,
+  ];
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    },
+  });
+}
+
+function stubFetchResolving(result: TicketResult, stages: PipelineStage[] = DEFAULT_STAGES) {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({ ok: true, json: async () => result }),
+    vi.fn().mockResolvedValue({ ok: true, body: buildSseStream(stages, result) }),
   );
 }
 
@@ -74,6 +90,33 @@ describe("TicketForm", () => {
     expect(screen.getByText("frustrated")).toBeInTheDocument();
     expect(screen.getByText(/refund_policy\.md/)).toBeInTheDocument();
     expect(screen.getByText("Resolved automatically")).toBeInTheDocument();
+  });
+
+  it("marks every pipeline step done once the stream completes", async () => {
+    stubFetchResolving(baseResult());
+    render(<TicketForm />);
+
+    submit("I was charged twice");
+
+    await screen.findByText("You're eligible for a refund.");
+
+    expect(screen.getByText("Classify ticket").closest("li")).toHaveAttribute("data-status", "done");
+    expect(screen.getByText("Respond").closest("li")).toHaveAttribute("data-status", "done");
+    expect(screen.getByText("Check faithfulness").closest("li")).toHaveAttribute("data-status", "done");
+    expect(screen.getByText("Validate & escalate").closest("li")).toHaveAttribute("data-status", "done");
+  });
+
+  it("skips the faithfulness step when the workflow takes the clarify branch", async () => {
+    stubFetchResolving(baseResult({ escalation: "none" }), ["classify", "clarify", "validate"]);
+    render(<TicketForm />);
+
+    submit("can I get a discount for referring a friend?");
+
+    await screen.findByText("You're eligible for a refund.");
+
+    expect(screen.getByText("Clarify").closest("li")).toHaveAttribute("data-status", "done");
+    expect(screen.getByText("Check faithfulness").closest("li")).toHaveAttribute("data-status", "skipped");
+    expect(screen.getByText("Validate & escalate").closest("li")).toHaveAttribute("data-status", "done");
   });
 
   it("shows unsupported claims when the answer is not faithful", async () => {
