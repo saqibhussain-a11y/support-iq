@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { applyPipelineStage, INITIAL_PIPELINE_STEPS, startPipelineSteps } from "./pipeline-sidebar";
+import type { ToolCallEvent } from "@/lib/api";
+import {
+  applyPipelineStage,
+  applyToolCallEvent,
+  INITIAL_PIPELINE_STEPS,
+  startPipelineSteps,
+} from "./pipeline-sidebar";
 
 function statusOf(steps: ReturnType<typeof applyPipelineStage>, key: string) {
   return steps.find((step) => step.key === key)?.status;
+}
+
+function toolCallsOf(steps: ReturnType<typeof applyPipelineStage>) {
+  return steps.find((step) => step.key === "answer")?.toolCalls ?? [];
 }
 
 describe("INITIAL_PIPELINE_STEPS", () => {
@@ -57,5 +67,98 @@ describe("applyPipelineStage", () => {
 
     steps = applyPipelineStage(steps, "validate");
     expect(statusOf(steps, "validate")).toBe("done");
+  });
+});
+
+describe("applyToolCallEvent", () => {
+  it("adds an active tool call entry on start", () => {
+    let steps = INITIAL_PIPELINE_STEPS.map((step) => ({ ...step }));
+    const startEvent: ToolCallEvent = {
+      type: "tool",
+      phase: "start",
+      tool: "search_knowledge_base",
+      arguments: { query: "refund policy" },
+    };
+
+    steps = applyToolCallEvent(steps, startEvent);
+
+    expect(toolCallsOf(steps)).toEqual([
+      { tool: "search_knowledge_base", detail: "refund policy", status: "active" },
+    ]);
+  });
+
+  it("marks the matching entry done and attaches a found summary on end", () => {
+    let steps = INITIAL_PIPELINE_STEPS.map((step) => ({ ...step }));
+    steps = applyToolCallEvent(steps, {
+      type: "tool",
+      phase: "start",
+      tool: "search_knowledge_base",
+      arguments: { query: "refund policy" },
+    });
+
+    steps = applyToolCallEvent(steps, {
+      type: "tool",
+      phase: "end",
+      tool: "search_knowledge_base",
+      found: true,
+      sources: ["refund_policy.md"],
+    });
+
+    expect(toolCallsOf(steps)).toEqual([
+      {
+        tool: "search_knowledge_base",
+        detail: "refund policy",
+        status: "done",
+        resultSummary: "Found in refund_policy.md",
+      },
+    ]);
+  });
+
+  it("marks the entry done with a not-found summary when nothing matched", () => {
+    let steps = INITIAL_PIPELINE_STEPS.map((step) => ({ ...step }));
+    steps = applyToolCallEvent(steps, {
+      type: "tool",
+      phase: "start",
+      tool: "get_full_document",
+      arguments: { document_name: "missing.md" },
+    });
+
+    steps = applyToolCallEvent(steps, {
+      type: "tool",
+      phase: "end",
+      tool: "get_full_document",
+      found: false,
+      sources: [],
+    });
+
+    expect(toolCallsOf(steps)[0]).toMatchObject({ status: "done", resultSummary: "No results found" });
+  });
+
+  it("tracks multiple sequential tool calls independently", () => {
+    let steps = INITIAL_PIPELINE_STEPS.map((step) => ({ ...step }));
+    steps = applyToolCallEvent(steps, {
+      type: "tool",
+      phase: "start",
+      tool: "search_knowledge_base",
+      arguments: { query: "a" },
+    });
+    steps = applyToolCallEvent(steps, {
+      type: "tool",
+      phase: "end",
+      tool: "search_knowledge_base",
+      found: true,
+      sources: ["a.md"],
+    });
+    steps = applyToolCallEvent(steps, {
+      type: "tool",
+      phase: "start",
+      tool: "get_full_document",
+      arguments: { document_name: "b.md" },
+    });
+
+    const toolCalls = toolCallsOf(steps);
+    expect(toolCalls).toHaveLength(2);
+    expect(toolCalls[0]).toMatchObject({ tool: "search_knowledge_base", status: "done" });
+    expect(toolCalls[1]).toMatchObject({ tool: "get_full_document", status: "active" });
   });
 });

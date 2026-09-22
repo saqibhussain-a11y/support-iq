@@ -243,6 +243,51 @@ async def test_respond_deduplicates_and_sorts_sources_across_searches():
 
 
 @pytest.mark.asyncio
+async def test_respond_notifies_on_tool_call_listener_with_start_and_end_events():
+    provider = ScriptedProvider(
+        [
+            tool_call_response("search_knowledge_base", {"query": "refund window"}),
+            final_response("answer"),
+        ]
+    )
+    retrieval_service = AsyncMock()
+    retrieval_service.search.return_value = RetrievalResult(
+        query="q", chunks=[make_chunk("refund_policy.md", "chunk", rerank_score=4.0)]
+    )
+    agent = ResponseAgent(llm_service=LLMService(provider), retrieval_service=retrieval_service)
+    events: list[dict] = []
+
+    await agent.respond(session=object(), question="q", on_tool_call=events.append)
+
+    assert events == [
+        {"phase": "start", "tool": "search_knowledge_base", "arguments": {"query": "refund window"}},
+        {"phase": "end", "tool": "search_knowledge_base", "found": True, "sources": ["refund_policy.md"]},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_respond_notifies_on_tool_call_listener_when_nothing_is_found(monkeypatch):
+    provider = ScriptedProvider(
+        [
+            tool_call_response("get_full_document", {"document_name": "missing.md"}),
+            final_response("I don't have enough information to answer that question."),
+        ]
+    )
+    retrieval_service = AsyncMock()
+
+    async def fake_fetch_full_document(session, document_name):
+        return None
+
+    monkeypatch.setattr("app.agents.response.fetch_full_document", fake_fetch_full_document)
+    agent = ResponseAgent(llm_service=LLMService(provider), retrieval_service=retrieval_service)
+    events: list[dict] = []
+
+    await agent.respond(session=object(), question="q", on_tool_call=events.append)
+
+    assert events[-1] == {"phase": "end", "tool": "get_full_document", "found": False, "sources": []}
+
+
+@pytest.mark.asyncio
 async def test_respond_sets_top_rerank_score_to_the_best_candidate_across_searches():
     provider = ScriptedProvider(
         [

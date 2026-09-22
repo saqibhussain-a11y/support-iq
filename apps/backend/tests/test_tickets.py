@@ -34,16 +34,34 @@ class FakeWorkflowService:
 
     async def run_stream(self, session, message: str):
         result = await self.run(session, message)
-        for stage in ("classify", "respond", "check_faithfulness", "validate"):
-            update = {key: result[key] for key in result if key in FakeWorkflowService._STAGE_KEYS[stage]}
-            yield stage, update
-
-    _STAGE_KEYS = {
-        "classify": {"classification"},
-        "respond": {"response"},
-        "check_faithfulness": {"faithfulness"},
-        "validate": {"escalation", "escalation_reasons"},
-    }
+        yield {"kind": "stage", "stage": "classify", "update": {"classification": result["classification"]}}
+        yield {
+            "kind": "tool",
+            "phase": "start",
+            "tool": "search_knowledge_base",
+            "arguments": {"query": message},
+        }
+        yield {
+            "kind": "tool",
+            "phase": "end",
+            "tool": "search_knowledge_base",
+            "found": True,
+            "sources": ["doc.md"],
+        }
+        yield {"kind": "stage", "stage": "respond", "update": {"response": result["response"]}}
+        yield {
+            "kind": "stage",
+            "stage": "check_faithfulness",
+            "update": {"faithfulness": result["faithfulness"]},
+        }
+        yield {
+            "kind": "stage",
+            "stage": "validate",
+            "update": {
+                "escalation": result["escalation"],
+                "escalation_reasons": result["escalation_reasons"],
+            },
+        }
 
 
 class FakeEscalatingWorkflowService(FakeWorkflowService):
@@ -115,6 +133,7 @@ async def test_stream_ticket_emits_stage_events_then_result():
 
     events = [chunk for chunk in body.decode().split("\n\n") if chunk]
     stage_events = [e for e in events if e.startswith("event: stage")]
+    tool_events = [e for e in events if e.startswith("event: tool")]
     result_events = [e for e in events if e.startswith("event: result")]
 
     assert [json.loads(e.split("data: ", 1)[1])["stage"] for e in stage_events] == [
@@ -122,6 +141,10 @@ async def test_stream_ticket_emits_stage_events_then_result():
         "respond",
         "check_faithfulness",
         "validate",
+    ]
+    assert [json.loads(e.split("data: ", 1)[1]) for e in tool_events] == [
+        {"phase": "start", "tool": "search_knowledge_base", "arguments": {"query": "I was charged twice"}},
+        {"phase": "end", "tool": "search_knowledge_base", "found": True, "sources": ["doc.md"]},
     ]
     assert len(result_events) == 1
     result_body = json.loads(result_events[0].split("data: ", 1)[1])

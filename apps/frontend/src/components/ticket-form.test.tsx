@@ -6,10 +6,19 @@ import { TicketForm } from "./ticket-form";
 
 const DEFAULT_STAGES: PipelineStage[] = ["classify", "respond", "check_faithfulness", "validate"];
 
-function buildSseStream(stages: PipelineStage[], result: TicketResult): ReadableStream<Uint8Array> {
+function buildSseStream(
+  stages: PipelineStage[],
+  result: TicketResult,
+  toolEvents: Record<string, unknown>[] = [],
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+  const classifyIndex = stages.indexOf("classify");
+  const stageChunks = stages.map((stage) => `event: stage\ndata: ${JSON.stringify({ stage })}\n\n`);
+  const toolChunks = toolEvents.map((event) => `event: tool\ndata: ${JSON.stringify(event)}\n\n`);
   const chunks = [
-    ...stages.map((stage) => `event: stage\ndata: ${JSON.stringify({ stage })}\n\n`),
+    ...stageChunks.slice(0, classifyIndex + 1),
+    ...toolChunks,
+    ...stageChunks.slice(classifyIndex + 1),
     `event: result\ndata: ${JSON.stringify(result)}\n\n`,
   ];
   return new ReadableStream({
@@ -20,10 +29,14 @@ function buildSseStream(stages: PipelineStage[], result: TicketResult): Readable
   });
 }
 
-function stubFetchResolving(result: TicketResult, stages: PipelineStage[] = DEFAULT_STAGES) {
+function stubFetchResolving(
+  result: TicketResult,
+  stages: PipelineStage[] = DEFAULT_STAGES,
+  toolEvents: Record<string, unknown>[] = [],
+) {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({ ok: true, body: buildSseStream(stages, result) }),
+    vi.fn().mockResolvedValue({ ok: true, body: buildSseStream(stages, result, toolEvents) }),
   );
 }
 
@@ -102,6 +115,26 @@ describe("TicketForm", () => {
     expect(screen.getByText("frustrated")).toBeInTheDocument();
     expect(screen.getByText(/refund_policy\.md/)).toBeInTheDocument();
     expect(screen.getByText("Resolved automatically")).toBeInTheDocument();
+  });
+
+  it("renders tool calls live as they stream in, with a found summary once complete", async () => {
+    stubFetchResolving(baseResult(), DEFAULT_STAGES, [
+      { phase: "start", tool: "search_knowledge_base", arguments: { query: "refund policy" } },
+      { phase: "end", tool: "search_knowledge_base", found: true, sources: ["refund_policy.md"] },
+    ]);
+    render(<TicketForm />);
+
+    submit("I was charged twice");
+
+    await screen.findByText("You're eligible for a refund.");
+
+    expect(screen.getByText("Searching knowledge base")).toBeInTheDocument();
+    expect(screen.getByText(/refund policy/)).toBeInTheDocument();
+    expect(screen.getByText("Found in refund_policy.md")).toBeInTheDocument();
+    expect(screen.getByText("Searching knowledge base").closest("li")).toHaveAttribute(
+      "data-tool-status",
+      "done",
+    );
   });
 
   it("marks every pipeline step done once the stream completes", async () => {

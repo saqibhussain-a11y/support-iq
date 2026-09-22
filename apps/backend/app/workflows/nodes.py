@@ -1,3 +1,4 @@
+from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from app.agents.schemas import SupportResponse
@@ -18,8 +19,15 @@ async def classify_node(state: TicketState, runtime: Runtime[WorkflowContext]) -
 
 
 async def respond_node(state: TicketState, runtime: Runtime[WorkflowContext]) -> dict:
+    writer = get_stream_writer()
+
+    def on_tool_call(event: dict) -> None:
+        writer({"kind": "tool", **event})
+
     with get_tracer().start_as_current_span("workflow.respond") as span:
-        response = await runtime.context.responder.respond(runtime.context.session, state["message"])
+        response = await runtime.context.responder.respond(
+            runtime.context.session, state["message"], on_tool_call=on_tool_call
+        )
         span.set_attribute("response.grounded", response.grounded)
         span.set_attribute("response.source_count", len(response.sources))
         if response.top_rerank_score is not None:

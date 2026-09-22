@@ -72,9 +72,21 @@ export async function resolveTicket(ticketId: string, notes: string | null): Pro
 
 export type PipelineStage = "classify" | "respond" | "clarify" | "check_faithfulness" | "validate";
 
+export type ToolCallPhase = "start" | "end";
+
+export interface ToolCallEvent {
+  type: "tool";
+  phase: ToolCallPhase;
+  tool: string;
+  arguments?: Record<string, string>;
+  found?: boolean;
+  sources?: string[];
+}
+
 export type StreamEvent =
   | { type: "stage"; stage: PipelineStage }
-  | { type: "result"; result: TicketResult };
+  | { type: "result"; result: TicketResult }
+  | ToolCallEvent;
 
 export async function* streamTicket(message: string): AsyncGenerator<StreamEvent> {
   const res = await fetch(`${getApiUrl()}/api/tickets/stream`, {
@@ -116,5 +128,6 @@ function parseSseEvent(raw: string): StreamEvent | null {
   const payload = JSON.parse(data);
   if (eventType === "stage") return { type: "stage", stage: payload.stage as PipelineStage };
   if (eventType === "result") return { type: "result", result: payload as TicketResult };
+  if (eventType === "tool") return { type: "tool", ...payload };
   return null;
 }

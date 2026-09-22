@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { streamTicket, type TicketResult } from "@/lib/api";
 import {
   applyPipelineStage,
+  applyToolCallEvent,
   INITIAL_PIPELINE_STEPS,
   PipelineSidebar,
   startPipelineSteps,
@@ -43,6 +44,8 @@ export function TicketForm() {
       for await (const streamEvent of streamTicket(message.trim())) {
         if (streamEvent.type === "stage") {
           setSteps((current) => applyPipelineStage(current, streamEvent.stage));
+        } else if (streamEvent.type === "tool") {
+          setSteps((current) => applyToolCallEvent(current, streamEvent));
         } else {
           setResult(streamEvent.result);
         }

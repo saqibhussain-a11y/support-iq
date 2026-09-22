@@ -15,12 +15,16 @@ class FakeClassifier:
 
 
 class FakeResponder:
-    def __init__(self, top_rerank_score: float = 5.0) -> None:
+    def __init__(self, top_rerank_score: float = 5.0, emits_tool_call: bool = False) -> None:
         self.called = False
         self.top_rerank_score = top_rerank_score
+        self.emits_tool_call = emits_tool_call
 
-    async def respond(self, session, question: str) -> SupportResponse:
+    async def respond(self, session, question: str, on_tool_call=None) -> SupportResponse:
         self.called = True
+        if self.emits_tool_call and on_tool_call:
+            on_tool_call({"phase": "start", "tool": "search_knowledge_base", "arguments": {"query": question}})
+            on_tool_call({"phase": "end", "tool": "search_knowledge_base", "found": True, "sources": ["doc.md"]})
         return SupportResponse(
             answer="grounded answer",
             sources=["doc.md"],
@@ -128,3 +132,26 @@ async def test_workflow_escalates_for_review_when_answer_is_unfaithful():
 
     assert result["escalation"] == EscalationLevel.REVIEW
     assert "60-day window" in result["escalation_reasons"][0]
+
+
+@pytest.mark.asyncio
+async def test_run_stream_interleaves_tool_events_with_stage_events():
+    classification = TicketClassification(category="billing", priority="low", sentiment="neutral")
+    responder = FakeResponder(emits_tool_call=True)
+    service = make_service(FakeClassifier(classification), responder)
+
+    events = [event async for event in service.run_stream(session=object(), message="I was charged twice")]
+
+    stage_names = [event["stage"] for event in events if event["kind"] == "stage"]
+    tool_events = [event for event in events if event["kind"] == "tool"]
+
+    assert stage_names == ["classify", "respond", "check_faithfulness", "validate"]
+    assert tool_events == [
+        {"kind": "tool", "phase": "start", "tool": "search_knowledge_base", "arguments": {"query": "I was charged twice"}},
+        {"kind": "tool", "phase": "end", "tool": "search_knowledge_base", "found": True, "sources": ["doc.md"]},
+    ]
+    respond_index = stage_names.index("respond")
+    tool_event_indices = [i for i, event in enumerate(events) if event["kind"] == "tool"]
+    stage_event_indices = [i for i, event in enumerate(events) if event["kind"] == "stage"]
+    assert min(tool_event_indices) > stage_event_indices[respond_index - 1]
+    assert max(tool_event_indices) < stage_event_indices[respond_index]

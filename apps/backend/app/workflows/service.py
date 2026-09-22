@@ -42,8 +42,13 @@ class SupportWorkflowService:
         context, initial_state = self._new_run(session, message)
         return await self._graph.ainvoke(initial_state, context=context)
 
-    async def run_stream(self, session: AsyncSession, message: str) -> AsyncIterator[tuple[str, dict]]:
+    async def run_stream(self, session: AsyncSession, message: str) -> AsyncIterator[dict]:
         context, initial_state = self._new_run(session, message)
-        async for chunk in self._graph.astream(initial_state, context=context, stream_mode="updates"):
-            for node_name, update in chunk.items():
-                yield node_name, update
+        async for mode, chunk in self._graph.astream(
+            initial_state, context=context, stream_mode=["updates", "custom"]
+        ):
+            if mode == "updates":
+                for node_name, update in chunk.items():
+                    yield {"kind": "stage", "stage": node_name, "update": update}
+            else:
+                yield chunk

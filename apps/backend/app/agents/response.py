@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,8 @@ FALLBACK_ANSWER = "I don't have enough information to answer that question."
 MAX_TOOL_ROUNDS = 3
 EXACT_DOCUMENT_MATCH_SCORE = 10.0
 
+ToolCallListener = Callable[[dict], None]
+
 
 @dataclass
 class _ToolOutcome:
@@ -28,7 +31,9 @@ class ResponseAgent:
         self._llm_service = llm_service
         self._retrieval_service = retrieval_service
 
-    async def respond(self, session: AsyncSession, question: str) -> SupportResponse:
+    async def respond(
+        self, session: AsyncSession, question: str, on_tool_call: ToolCallListener | None = None
+    ) -> SupportResponse:
         messages = [
             ChatMessage(role="system", content=AGENTIC_RESPONSE_SYSTEM_PROMPT),
             ChatMessage(role="user", content=question),
@@ -64,7 +69,18 @@ class ResponseAgent:
                 )
             )
             for tool_call in llm_response.tool_calls:
+                if on_tool_call:
+                    on_tool_call({"phase": "start", "tool": tool_call.name, "arguments": tool_call.arguments})
                 outcome = await self._execute_tool(session, tool_call)
+                if on_tool_call:
+                    on_tool_call(
+                        {
+                            "phase": "end",
+                            "tool": tool_call.name,
+                            "found": bool(outcome.sources),
+                            "sources": sorted(outcome.sources),
+                        }
+                    )
                 sources |= outcome.sources
                 if outcome.content:
                     context_parts.append(outcome.content)

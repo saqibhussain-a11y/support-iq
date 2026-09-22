@@ -52,9 +52,13 @@ async def create_ticket_stream(
             "escalation_reasons": [],
         }
         async with session_scope() as session:
-            async for stage, update in workflow.run_stream(session, request.message):
-                state.update(update)
-                yield f"event: stage\ndata: {json.dumps({'stage': stage})}\n\n"
+            async for event in workflow.run_stream(session, request.message):
+                if event["kind"] == "stage":
+                    state.update(event["update"])
+                    yield f"event: stage\ndata: {json.dumps({'stage': event['stage']})}\n\n"
+                else:
+                    payload = {key: value for key, value in event.items() if key != "kind"}
+                    yield f"event: tool\ndata: {json.dumps(payload)}\n\n"
 
             record = await save_ticket(
                 session,
