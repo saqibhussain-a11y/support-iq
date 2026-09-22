@@ -76,7 +76,7 @@ async def test_workflow_routes_other_category_to_clarify_and_skips_response_agen
     assert result["response"].grounded is False
     assert result["response"].sources == []
     assert result["faithfulness"] is None
-    assert result["escalation"] == EscalationLevel.NONE
+    assert result["escalation"] == EscalationLevel.REVIEW
 
 
 @pytest.mark.asyncio

@@ -29,6 +29,8 @@ function stubFetchResolving(result: TicketResult, stages: PipelineStage[] = DEFA
 
 function baseResult(overrides: Partial<TicketResult> = {}): TicketResult {
   return {
+    id: "11111111-1111-1111-1111-111111111111",
+    message: "I was charged twice for my subscription this month.",
     classification: { category: "billing", priority: "high", sentiment: "frustrated" },
     response: {
       answer: "You're eligible for a refund.",
@@ -40,6 +42,10 @@ function baseResult(overrides: Partial<TicketResult> = {}): TicketResult {
     faithfulness: { is_faithful: true, unsupported_claims: [] },
     escalation: "none",
     escalation_reasons: [],
+    status: "auto_resolved",
+    created_at: "2026-09-22T12:00:00Z",
+    resolved_at: null,
+    resolution_notes: null,
     ...overrides,
   };
 }

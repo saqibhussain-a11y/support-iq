@@ -66,15 +66,15 @@ def test_low_confidence_non_billing_still_flags_review_but_not_immediate():
     assert result.escalation == EscalationLevel.REVIEW
 
 
-def test_ungrounded_response_skips_confidence_check():
+def test_ungrounded_response_escalates_for_review():
     result = evaluate(
         "hello there",
         make_classification(category="other", priority="low", sentiment="neutral"),
         make_response(grounded=False, top_rerank_score=None),
     )
 
-    assert result.escalation == EscalationLevel.NONE
-    assert result.reasons == []
+    assert result.escalation == EscalationLevel.REVIEW
+    assert any("no documented policy matched" in reason for reason in result.reasons)
 
 
 def test_empty_answer_escalates_for_review():

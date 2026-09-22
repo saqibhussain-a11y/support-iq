@@ -1,15 +1,15 @@
 import json
+import uuid
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.schemas import SupportResponse, TicketClassification
 from app.db.session import get_db_session
-from app.hallucination.schemas import FaithfulnessVerdict
-from app.validation.schemas import EscalationLevel
+from app.tickets.repository import list_tickets, resolve_ticket, save_ticket
+from app.tickets.schemas import ResolveTicketRequest, TicketRecordOut, TicketStatus
 from app.workflows.dependencies import get_support_workflow_service
 from app.workflows.service import SupportWorkflowService
 
@@ -20,22 +20,16 @@ class TicketRequest(BaseModel):
     message: str
 
 
-class TicketResult(BaseModel):
-    classification: TicketClassification
-    response: SupportResponse
-    faithfulness: FaithfulnessVerdict | None
-    escalation: EscalationLevel
-    escalation_reasons: list[str]
-
-
-@router.post("/tickets", response_model=TicketResult)
+@router.post("/tickets", response_model=TicketRecordOut)
 async def create_ticket(
     request: TicketRequest,
     session: AsyncSession = Depends(get_db_session),
     workflow: SupportWorkflowService = Depends(get_support_workflow_service),
-) -> TicketResult:
+) -> TicketRecordOut:
     result = await workflow.run(session, request.message)
-    return TicketResult(
+    return await save_ticket(
+        session,
+        message=request.message,
         classification=result["classification"],
         response=result["response"],
         faithfulness=result["faithfulness"],
@@ -62,13 +56,35 @@ async def create_ticket_stream(
             state.update(update)
             yield f"event: stage\ndata: {json.dumps({'stage': stage})}\n\n"
 
-        result = TicketResult(
+        record = await save_ticket(
+            session,
+            message=request.message,
             classification=state["classification"],
             response=state["response"],
             faithfulness=state["faithfulness"],
             escalation=state["escalation"],
             escalation_reasons=state["escalation_reasons"],
         )
-        yield f"event: result\ndata: {result.model_dump_json()}\n\n"
+        yield f"event: result\ndata: {record.model_dump_json()}\n\n"
 
     return StreamingResponse(event_source(), media_type="text/event-stream")
+
+
+@router.get("/tickets", response_model=list[TicketRecordOut])
+async def get_tickets(
+    status: TicketStatus | None = Query(default=None),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[TicketRecordOut]:
+    return await list_tickets(session, status=status)
+
+
+@router.post("/tickets/{ticket_id}/resolve", response_model=TicketRecordOut)
+async def resolve_ticket_route(
+    ticket_id: uuid.UUID,
+    request: ResolveTicketRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> TicketRecordOut:
+    record = await resolve_ticket(session, ticket_id, request.notes)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return record

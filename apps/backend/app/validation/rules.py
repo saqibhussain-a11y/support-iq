@@ -50,6 +50,8 @@ def evaluate(
             reasons.append("retrieval confidence too low to trust the grounded answer")
         if classification.category == "billing" and classification.priority == "high" and low_confidence:
             reasons.append("high-priority billing dispute without a confident, documented match")
+    else:
+        reasons.append("no documented policy matched this request; needs human triage")
 
     if reasons:
         return ValidationResult(escalation=EscalationLevel.REVIEW, reasons=reasons)
