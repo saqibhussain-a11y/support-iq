@@ -1,9 +1,15 @@
-import { AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Coins, ShieldAlert } from "lucide-react";
 import type { ComponentType } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { EscalationLevel, TicketCategory, TicketPriority, TicketStatus } from "@/lib/api";
+import type {
+  EscalationLevel,
+  TicketCategory,
+  TicketPriority,
+  TicketStatus,
+  TokenUsageBreakdown,
+} from "@/lib/api";
 
 const CATEGORY_STYLES: Record<TicketCategory, string> = {
   billing: "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-400/20",
@@ -58,6 +64,20 @@ export function StatusBadge({ status }: { status: TicketStatus }) {
     <Badge className={cn("rounded-md ring-1 ring-inset", STATUS_STYLES[status])}>
       {STATUS_LABELS[status]}
     </Badge>
+  );
+}
+
+export function TokenUsageSummary({ usage }: { usage: TokenUsageBreakdown }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1 font-medium text-foreground">
+        <Coins className="size-3.5" />
+        {usage.total.total_tokens.toLocaleString()} tokens
+      </span>
+      <span>Classify {usage.classify.total_tokens.toLocaleString()}</span>
+      <span>Respond {usage.respond.total_tokens.toLocaleString()}</span>
+      <span>Faithfulness {usage.faithfulness.total_tokens.toLocaleString()}</span>
+    </div>
   );
 }
 

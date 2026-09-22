@@ -8,7 +8,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { fetchTicketQueue, resolveTicket, type TicketResult, type TicketStatus } from "@/lib/api";
-import { CategoryBadge, ESCALATION_META, PriorityBadge, StatusBadge } from "@/components/ticket-badges";
+import {
+  CategoryBadge,
+  ESCALATION_META,
+  PriorityBadge,
+  StatusBadge,
+  TokenUsageSummary,
+} from "@/components/ticket-badges";
 
 type LoadState = "loading" | "ready" | "error";
 type QueueTab = Extract<TicketStatus, "pending_review" | "resolved">;
@@ -183,6 +189,8 @@ function QueueItem({ ticket, onResolved }: { ticket: TicketResult; onResolved: (
             {ticket.resolution_notes && <p className="text-foreground">{ticket.resolution_notes}</p>}
           </div>
         )}
+
+        {ticket.token_usage && <TokenUsageSummary usage={ticket.token_usage} />}
       </CardContent>
     </Card>
   );

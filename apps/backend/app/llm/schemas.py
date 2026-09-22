@@ -28,3 +28,10 @@ class LLMResponse(BaseModel):
     finish_reason: str
     usage: TokenUsage
     tool_calls: list[ToolCall] | None = None
+
+
+class TokenUsageBreakdown(BaseModel):
+    classify: TokenUsage
+    respond: TokenUsage
+    faithfulness: TokenUsage
+    total: TokenUsage

@@ -35,6 +35,7 @@ class SupportWorkflowService:
             "faithfulness": None,
             "escalation": None,
             "escalation_reasons": [],
+            "token_usage": None,
         }
         return context, initial_state
 

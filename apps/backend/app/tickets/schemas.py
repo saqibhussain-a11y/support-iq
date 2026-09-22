@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.agents.schemas import SupportResponse, TicketClassification
 from app.hallucination.schemas import FaithfulnessVerdict
+from app.llm.schemas import TokenUsageBreakdown
 from app.validation.schemas import EscalationLevel
 
 
@@ -23,6 +24,7 @@ class TicketRecordOut(BaseModel):
     faithfulness: FaithfulnessVerdict | None
     escalation: EscalationLevel
     escalation_reasons: list[str]
+    token_usage: TokenUsageBreakdown | None
     status: TicketStatus
     created_at: datetime
     resolved_at: datetime | None

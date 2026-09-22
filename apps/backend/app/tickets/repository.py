@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.schemas import SupportResponse, TicketClassification
 from app.db.models import TicketRecord
 from app.hallucination.schemas import FaithfulnessVerdict
+from app.llm.schemas import TokenUsageBreakdown
 from app.tickets.schemas import TicketRecordOut, TicketStatus
 from app.validation.schemas import EscalationLevel
 
@@ -26,6 +27,7 @@ def _to_out(record: TicketRecord) -> TicketRecordOut:
         faithfulness=FaithfulnessVerdict(**record.faithfulness) if record.faithfulness else None,
         escalation=EscalationLevel(record.escalation),
         escalation_reasons=record.escalation_reasons,
+        token_usage=TokenUsageBreakdown(**record.token_usage) if record.token_usage else None,
         status=TicketStatus(record.status),
         created_at=record.created_at,
         resolved_at=record.resolved_at,
@@ -41,6 +43,7 @@ async def save_ticket(
     faithfulness: FaithfulnessVerdict | None,
     escalation: EscalationLevel,
     escalation_reasons: list[str],
+    token_usage: TokenUsageBreakdown | None = None,
 ) -> TicketRecordOut:
     record = TicketRecord(
         message=message,
@@ -51,6 +54,7 @@ async def save_ticket(
         faithfulness=faithfulness.model_dump() if faithfulness else None,
         escalation=escalation.value,
         escalation_reasons=escalation_reasons,
+        token_usage=token_usage.model_dump() if token_usage else None,
         status=_status_for_escalation(escalation).value,
     )
     session.add(record)

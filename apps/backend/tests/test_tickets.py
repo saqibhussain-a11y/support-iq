@@ -9,9 +9,19 @@ from app.agents.schemas import SupportResponse, TicketClassification
 from app.db.models import TicketRecord
 from app.db.session import get_db_session, session_scope
 from app.hallucination.schemas import FaithfulnessVerdict
+from app.llm.schemas import TokenUsage, TokenUsageBreakdown
 from app.main import app
 from app.validation.schemas import EscalationLevel
 from app.workflows.dependencies import get_support_workflow_service
+
+
+def _fake_token_usage() -> TokenUsageBreakdown:
+    return TokenUsageBreakdown(
+        classify=TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        respond=TokenUsage(prompt_tokens=40, completion_tokens=20, total_tokens=60),
+        faithfulness=TokenUsage(prompt_tokens=25, completion_tokens=5, total_tokens=30),
+        total=TokenUsage(prompt_tokens=75, completion_tokens=30, total_tokens=105),
+    )
 
 
 class FakeWorkflowService:
@@ -30,6 +40,7 @@ class FakeWorkflowService:
             "faithfulness": FaithfulnessVerdict(is_faithful=True, unsupported_claims=[]),
             "escalation": EscalationLevel.NONE,
             "escalation_reasons": [],
+            "token_usage": _fake_token_usage(),
         }
 
     async def run_stream(self, session, message: str):
@@ -60,6 +71,7 @@ class FakeWorkflowService:
             "update": {
                 "escalation": result["escalation"],
                 "escalation_reasons": result["escalation_reasons"],
+                "token_usage": result["token_usage"],
             },
         }
 
@@ -113,6 +125,8 @@ async def test_create_ticket_returns_classification_and_response():
     assert body["status"] == "auto_resolved"
     assert body["id"]
     assert body["resolved_at"] is None
+    assert body["token_usage"]["total"] == {"prompt_tokens": 75, "completion_tokens": 30, "total_tokens": 105}
+    assert body["token_usage"]["respond"] == {"prompt_tokens": 40, "completion_tokens": 20, "total_tokens": 60}
 
 
 @pytest.mark.asyncio
@@ -151,6 +165,7 @@ async def test_stream_ticket_emits_stage_events_then_result():
     assert result_body["classification"]["category"] == "billing"
     assert result_body["escalation"] == "none"
     assert result_body["status"] == "auto_resolved"
+    assert result_body["token_usage"]["total"]["total_tokens"] == 105
 
 
 @pytest.mark.asyncio

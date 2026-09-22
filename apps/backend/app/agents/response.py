@@ -7,7 +7,7 @@ from app.agents.prompts import AGENTIC_RESPONSE_SYSTEM_PROMPT
 from app.agents.schemas import SupportResponse
 from app.agents.tools import TOOL_SPECS
 from app.llm.schemas import ChatMessage, ToolCall
-from app.llm.service import LLMService
+from app.llm.service import LLMService, UsageListener
 from app.observability.tracing import get_tracer
 from app.retrieval.documents import fetch_full_document
 from app.retrieval.service import RetrievalService
@@ -32,7 +32,11 @@ class ResponseAgent:
         self._retrieval_service = retrieval_service
 
     async def respond(
-        self, session: AsyncSession, question: str, on_tool_call: ToolCallListener | None = None
+        self,
+        session: AsyncSession,
+        question: str,
+        on_tool_call: ToolCallListener | None = None,
+        on_usage: UsageListener | None = None,
     ) -> SupportResponse:
         messages = [
             ChatMessage(role="system", content=AGENTIC_RESPONSE_SYSTEM_PROMPT),
@@ -43,7 +47,9 @@ class ResponseAgent:
         top_rerank_score: float | None = None
 
         for round_index in range(MAX_TOOL_ROUNDS):
-            llm_response = await self._llm_service.complete(messages, temperature=0.2, tools=TOOL_SPECS)
+            llm_response = await self._llm_service.complete(
+                messages, temperature=0.2, tools=TOOL_SPECS, on_usage=on_usage
+            )
 
             if not llm_response.tool_calls:
                 if not sources:

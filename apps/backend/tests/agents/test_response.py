@@ -243,6 +243,26 @@ async def test_respond_deduplicates_and_sorts_sources_across_searches():
 
 
 @pytest.mark.asyncio
+async def test_respond_notifies_on_usage_listener_once_per_completion_call():
+    provider = ScriptedProvider(
+        [
+            tool_call_response("search_knowledge_base", {"query": "refund window"}),
+            final_response("answer"),
+        ]
+    )
+    retrieval_service = AsyncMock()
+    retrieval_service.search.return_value = RetrievalResult(
+        query="q", chunks=[make_chunk("refund_policy.md", "chunk", rerank_score=4.0)]
+    )
+    agent = ResponseAgent(llm_service=LLMService(provider), retrieval_service=retrieval_service)
+    usages: list[TokenUsage] = []
+
+    await agent.respond(session=object(), question="q", on_usage=usages.append)
+
+    assert usages == [usage(), usage()]
+
+
+@pytest.mark.asyncio
 async def test_respond_notifies_on_tool_call_listener_with_start_and_end_events():
     provider = ScriptedProvider(
         [

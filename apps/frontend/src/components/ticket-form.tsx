@@ -17,7 +17,7 @@ import {
   startPipelineSteps,
   type PipelineStep,
 } from "@/components/pipeline-sidebar";
-import { CategoryBadge, ESCALATION_META, PriorityBadge } from "@/components/ticket-badges";
+import { CategoryBadge, ESCALATION_META, PriorityBadge, TokenUsageSummary } from "@/components/ticket-badges";
 
 const EXAMPLE_MESSAGES = [
   "I was charged twice for my subscription this month and I want a refund.",
@@ -183,6 +183,8 @@ function TicketResultCard({ result }: { result: TicketResult }) {
             </div>
           </div>
         )}
+
+        {result.token_usage && <TokenUsageSummary usage={result.token_usage} />}
       </CardContent>
     </Card>
   );

@@ -35,6 +35,7 @@ async def create_ticket(
         faithfulness=result["faithfulness"],
         escalation=result["escalation"],
         escalation_reasons=result["escalation_reasons"],
+        token_usage=result["token_usage"],
     )
 
 
@@ -50,6 +51,7 @@ async def create_ticket_stream(
             "faithfulness": None,
             "escalation": None,
             "escalation_reasons": [],
+            "token_usage": None,
         }
         async with session_scope() as session:
             async for event in workflow.run_stream(session, request.message):
@@ -68,6 +70,7 @@ async def create_ticket_stream(
                 faithfulness=state["faithfulness"],
                 escalation=state["escalation"],
                 escalation_reasons=state["escalation_reasons"],
+                token_usage=state["token_usage"],
             )
         yield f"event: result\ndata: {record.model_dump_json()}\n\n"
 

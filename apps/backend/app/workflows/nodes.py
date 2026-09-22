@@ -11,7 +11,9 @@ CLARIFY_ANSWER = "Could you share a bit more detail about your issue so I can he
 
 async def classify_node(state: TicketState, runtime: Runtime[WorkflowContext]) -> dict:
     with get_tracer().start_as_current_span("workflow.classify") as span:
-        classification = await runtime.context.classifier.classify(state["message"])
+        classification = await runtime.context.classifier.classify(
+            state["message"], on_usage=runtime.context.token_usage.classify.add
+        )
         span.set_attribute("classification.category", classification.category)
         span.set_attribute("classification.priority", classification.priority)
         span.set_attribute("classification.sentiment", classification.sentiment)
@@ -26,7 +28,10 @@ async def respond_node(state: TicketState, runtime: Runtime[WorkflowContext]) ->
 
     with get_tracer().start_as_current_span("workflow.respond") as span:
         response = await runtime.context.responder.respond(
-            runtime.context.session, state["message"], on_tool_call=on_tool_call
+            runtime.context.session,
+            state["message"],
+            on_tool_call=on_tool_call,
+            on_usage=runtime.context.token_usage.respond.add,
         )
         span.set_attribute("response.grounded", response.grounded)
         span.set_attribute("response.source_count", len(response.sources))
@@ -48,17 +53,23 @@ def route_after_classification(state: TicketState) -> str:
 async def check_faithfulness_node(state: TicketState, runtime: Runtime[WorkflowContext]) -> dict:
     response = state["response"]
     with get_tracer().start_as_current_span("workflow.check_faithfulness") as span:
-        verdict = await runtime.context.faithfulness_checker.check(response.answer, response.context)
+        verdict = await runtime.context.faithfulness_checker.check(
+            response.answer, response.context, on_usage=runtime.context.token_usage.faithfulness.add
+        )
         span.set_attribute("faithfulness.is_faithful", verdict.is_faithful)
         span.set_attribute("faithfulness.unsupported_claim_count", len(verdict.unsupported_claims))
     return {"faithfulness": verdict}
 
 
-async def validate_node(state: TicketState) -> dict:
+async def validate_node(state: TicketState, runtime: Runtime[WorkflowContext]) -> dict:
     with get_tracer().start_as_current_span("workflow.validate") as span:
         result = evaluate(
             state["message"], state["classification"], state["response"], state["faithfulness"]
         )
         span.set_attribute("escalation.level", result.escalation.value)
         span.set_attribute("escalation.reason_count", len(result.reasons))
-    return {"escalation": result.escalation, "escalation_reasons": result.reasons}
+    return {
+        "escalation": result.escalation,
+        "escalation_reasons": result.reasons,
+        "token_usage": runtime.context.token_usage.to_breakdown(),
+    }

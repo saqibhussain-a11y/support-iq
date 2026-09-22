@@ -17,6 +17,7 @@ function makeResult(overrides: Partial<TicketResult> = {}): TicketResult {
     faithfulness: { is_faithful: true, unsupported_claims: [] },
     escalation: "none",
     escalation_reasons: [],
+    token_usage: null,
     status: "auto_resolved",
     created_at: "2026-09-22T12:00:00Z",
     resolved_at: null,

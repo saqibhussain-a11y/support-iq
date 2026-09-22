@@ -19,6 +19,12 @@ function makeTicket(overrides: Partial<TicketResult> = {}): TicketResult {
     faithfulness: null,
     escalation: "review",
     escalation_reasons: ["no documented policy matched this request; needs human triage"],
+    token_usage: {
+      classify: { prompt_tokens: 173, completion_tokens: 82, total_tokens: 255 },
+      respond: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      faithfulness: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      total: { prompt_tokens: 173, completion_tokens: 82, total_tokens: 255 },
+    },
     status: "pending_review",
     created_at: "2026-09-22T12:00:00Z",
     resolved_at: null,
@@ -50,6 +56,8 @@ describe("ReviewQueue", () => {
     expect(screen.getByText("no documented policy matched this request; needs human triage")).toBeInTheDocument();
     expect(screen.getByText("Escalated for review")).toBeInTheDocument();
     expect(screen.getByText("Pending review")).toBeInTheDocument();
+    expect(screen.getByText("255 tokens")).toBeInTheDocument();
+    expect(screen.getByText("Classify 255")).toBeInTheDocument();
   });
 
   it("switches to the Resolved tab and shows resolution notes without a resolve form", async () => {

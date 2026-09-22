@@ -2,6 +2,7 @@ import pytest
 
 from app.agents.schemas import SupportResponse, TicketClassification
 from app.hallucination.schemas import FaithfulnessVerdict
+from app.llm.schemas import TokenUsage
 from app.validation.schemas import EscalationLevel
 from app.workflows.service import SupportWorkflowService
 
@@ -10,7 +11,9 @@ class FakeClassifier:
     def __init__(self, classification: TicketClassification) -> None:
         self.classification = classification
 
-    async def classify(self, message: str) -> TicketClassification:
+    async def classify(self, message: str, on_usage=None) -> TicketClassification:
+        if on_usage:
+            on_usage(TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15))
         return self.classification
 
 
@@ -20,11 +23,13 @@ class FakeResponder:
         self.top_rerank_score = top_rerank_score
         self.emits_tool_call = emits_tool_call
 
-    async def respond(self, session, question: str, on_tool_call=None) -> SupportResponse:
+    async def respond(self, session, question: str, on_tool_call=None, on_usage=None) -> SupportResponse:
         self.called = True
         if self.emits_tool_call and on_tool_call:
             on_tool_call({"phase": "start", "tool": "search_knowledge_base", "arguments": {"query": question}})
             on_tool_call({"phase": "end", "tool": "search_knowledge_base", "found": True, "sources": ["doc.md"]})
+        if on_usage:
+            on_usage(TokenUsage(prompt_tokens=40, completion_tokens=20, total_tokens=60))
         return SupportResponse(
             answer="grounded answer",
             sources=["doc.md"],
@@ -39,8 +44,10 @@ class FakeFaithfulnessChecker:
         self.called = False
         self.verdict = verdict or FaithfulnessVerdict(is_faithful=True, unsupported_claims=[])
 
-    async def check(self, answer: str, context: str) -> FaithfulnessVerdict:
+    async def check(self, answer: str, context: str, on_usage=None) -> FaithfulnessVerdict:
         self.called = True
+        if on_usage:
+            on_usage(TokenUsage(prompt_tokens=25, completion_tokens=5, total_tokens=30))
         return self.verdict
 
 
@@ -104,6 +111,37 @@ async def test_workflow_escalates_for_review_on_low_confidence_billing_dispute()
     result = await service.run(session=object(), message="I want a refund for my renewal")
 
     assert result["escalation"] == EscalationLevel.REVIEW
+
+
+@pytest.mark.asyncio
+async def test_workflow_accumulates_token_usage_across_classify_respond_and_faithfulness():
+    classification = TicketClassification(category="billing", priority="low", sentiment="neutral")
+    responder = FakeResponder()
+    checker = FakeFaithfulnessChecker()
+    service = make_service(FakeClassifier(classification), responder, checker)
+
+    result = await service.run(session=object(), message="I was charged twice")
+
+    usage = result["token_usage"]
+    assert usage.classify == TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    assert usage.respond == TokenUsage(prompt_tokens=40, completion_tokens=20, total_tokens=60)
+    assert usage.faithfulness == TokenUsage(prompt_tokens=25, completion_tokens=5, total_tokens=30)
+    assert usage.total == TokenUsage(prompt_tokens=75, completion_tokens=30, total_tokens=105)
+
+
+@pytest.mark.asyncio
+async def test_workflow_token_usage_only_reflects_classify_on_the_clarify_path():
+    classification = TicketClassification(category="other", priority="low", sentiment="neutral")
+    responder = FakeResponder()
+    service = make_service(FakeClassifier(classification), responder)
+
+    result = await service.run(session=object(), message="hello there")
+
+    usage = result["token_usage"]
+    assert usage.classify == TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    assert usage.respond == TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+    assert usage.faithfulness == TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+    assert usage.total == TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
 
 
 @pytest.mark.asyncio

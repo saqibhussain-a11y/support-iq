@@ -55,6 +55,12 @@ function baseResult(overrides: Partial<TicketResult> = {}): TicketResult {
     faithfulness: { is_faithful: true, unsupported_claims: [] },
     escalation: "none",
     escalation_reasons: [],
+    token_usage: {
+      classify: { prompt_tokens: 179, completion_tokens: 102, total_tokens: 281 },
+      respond: { prompt_tokens: 1086, completion_tokens: 184, total_tokens: 1270 },
+      faithfulness: { prompt_tokens: 611, completion_tokens: 290, total_tokens: 901 },
+      total: { prompt_tokens: 1876, completion_tokens: 576, total_tokens: 2452 },
+    },
     status: "auto_resolved",
     created_at: "2026-09-22T12:00:00Z",
     resolved_at: null,
@@ -115,6 +121,20 @@ describe("TicketForm", () => {
     expect(screen.getByText("frustrated")).toBeInTheDocument();
     expect(screen.getByText(/refund_policy\.md/)).toBeInTheDocument();
     expect(screen.getByText("Resolved automatically")).toBeInTheDocument();
+  });
+
+  it("shows a token usage breakdown once the result arrives", async () => {
+    stubFetchResolving(baseResult());
+    render(<TicketForm />);
+
+    submit("I was charged twice");
+
+    await screen.findByText("You're eligible for a refund.");
+
+    expect(screen.getByText("2,452 tokens")).toBeInTheDocument();
+    expect(screen.getByText("Classify 281")).toBeInTheDocument();
+    expect(screen.getByText("Respond 1,270")).toBeInTheDocument();
+    expect(screen.getByText("Faithfulness 901")).toBeInTheDocument();
   });
 
   it("renders tool calls live as they stream in, with a found summary once complete", async () => {

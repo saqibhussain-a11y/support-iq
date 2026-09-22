@@ -26,6 +26,19 @@ export interface FaithfulnessVerdict {
   unsupported_claims: string[];
 }
 
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+export interface TokenUsageBreakdown {
+  classify: TokenUsage;
+  respond: TokenUsage;
+  faithfulness: TokenUsage;
+  total: TokenUsage;
+}
+
 export type TicketStatus = "auto_resolved" | "pending_review" | "resolved";
 
 export interface TicketResult {
@@ -36,6 +49,7 @@ export interface TicketResult {
   faithfulness: FaithfulnessVerdict | null;
   escalation: EscalationLevel;
   escalation_reasons: string[];
+  token_usage: TokenUsageBreakdown | null;
   status: TicketStatus;
   created_at: string;
   resolved_at: string | null;
