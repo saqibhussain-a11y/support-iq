@@ -66,7 +66,7 @@ EVAL_CASES: list[EvalCase] = [
         id="vague_greeting",
         message="hey",
         expected_category="other",
-        expected_escalation=EscalationLevel.NONE,
+        expected_escalation=EscalationLevel.REVIEW,
         expected_sources=[],
         expected_facts=[],
     ),

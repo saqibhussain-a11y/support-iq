@@ -27,8 +27,14 @@ class FakeProvider(ModelProvider):
         temperature: float = 0.7,
         top_p: float = 1.0,
         json_mode: bool = False,
+        tools: list[dict] | None = None,
     ) -> LLMResponse:
-        self.last_call_kwargs = {"temperature": temperature, "top_p": top_p, "json_mode": json_mode}
+        self.last_call_kwargs = {
+            "temperature": temperature,
+            "top_p": top_p,
+            "json_mode": json_mode,
+            "tools": tools,
+        }
         assert self.response is not None
         return self.response
 
@@ -60,7 +66,23 @@ async def test_complete_delegates_to_provider():
     result = await service.complete([ChatMessage(role="user", content="hi")])
 
     assert result.content == "hello"
-    assert provider.last_call_kwargs == {"temperature": 0.7, "top_p": 1.0, "json_mode": False}
+    assert provider.last_call_kwargs == {
+        "temperature": 0.7,
+        "top_p": 1.0,
+        "json_mode": False,
+        "tools": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_complete_passes_tools_through_to_provider():
+    provider = FakeProvider(response=make_response("hello"))
+    service = LLMService(provider)
+    tools = [{"type": "function", "function": {"name": "search_knowledge_base"}}]
+
+    await service.complete([ChatMessage(role="user", content="hi")], tools=tools)
+
+    assert provider.last_call_kwargs["tools"] == tools
 
 
 @pytest.mark.asyncio

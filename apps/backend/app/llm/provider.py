@@ -13,6 +13,7 @@ class ModelProvider(ABC):
         temperature: float = 0.7,
         top_p: float = 1.0,
         json_mode: bool = False,
+        tools: list[dict] | None = None,
     ) -> LLMResponse: ...
 
     @abstractmethod

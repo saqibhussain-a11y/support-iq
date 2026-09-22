@@ -21,8 +21,9 @@ class LLMService:
         *,
         temperature: float = 0.7,
         top_p: float = 1.0,
+        tools: list[dict] | None = None,
     ) -> LLMResponse:
-        return await self._provider.complete(messages, temperature=temperature, top_p=top_p)
+        return await self._provider.complete(messages, temperature=temperature, top_p=top_p, tools=tools)
 
     async def complete_structured(
         self,
