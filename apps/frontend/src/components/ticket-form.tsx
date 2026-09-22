@@ -13,6 +13,7 @@ import {
   applyPipelineStage,
   INITIAL_PIPELINE_STEPS,
   PipelineSidebar,
+  startPipelineSteps,
   type PipelineStep,
 } from "@/components/pipeline-sidebar";
 import { CategoryBadge, ESCALATION_META, PriorityBadge } from "@/components/ticket-badges";
@@ -37,7 +38,7 @@ export function TicketForm() {
 
     setState("loading");
     setResult(null);
-    setSteps(INITIAL_PIPELINE_STEPS.map((step) => ({ ...step })));
+    setSteps(startPipelineSteps());
     try {
       for await (const streamEvent of streamTicket(message.trim())) {
         if (streamEvent.type === "stage") {

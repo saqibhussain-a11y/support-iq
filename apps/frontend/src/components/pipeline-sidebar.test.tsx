@@ -1,10 +1,27 @@
 import { describe, expect, it } from "vitest";
 
-import { applyPipelineStage, INITIAL_PIPELINE_STEPS } from "./pipeline-sidebar";
+import { applyPipelineStage, INITIAL_PIPELINE_STEPS, startPipelineSteps } from "./pipeline-sidebar";
 
 function statusOf(steps: ReturnType<typeof applyPipelineStage>, key: string) {
   return steps.find((step) => step.key === key)?.status;
 }
+
+describe("INITIAL_PIPELINE_STEPS", () => {
+  it("starts every step pending, with no step active before a submission", () => {
+    expect(INITIAL_PIPELINE_STEPS.every((step) => step.status === "pending")).toBe(true);
+  });
+});
+
+describe("startPipelineSteps", () => {
+  it("marks only classify as active when a submission begins", () => {
+    const steps = startPipelineSteps();
+
+    expect(statusOf(steps, "classify")).toBe("active");
+    expect(statusOf(steps, "answer")).toBe("pending");
+    expect(statusOf(steps, "faithfulness")).toBe("pending");
+    expect(statusOf(steps, "validate")).toBe("pending");
+  });
+});
 
 describe("applyPipelineStage", () => {
   it("walks the respond branch: classify -> respond -> check_faithfulness -> validate", () => {

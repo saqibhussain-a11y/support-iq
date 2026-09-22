@@ -13,11 +13,17 @@ export interface PipelineStep {
 }
 
 export const INITIAL_PIPELINE_STEPS: PipelineStep[] = [
-  { key: "classify", label: "Classify ticket", agent: "Classifier Agent", status: "active" },
+  { key: "classify", label: "Classify ticket", agent: "Classifier Agent", status: "pending" },
   { key: "answer", label: "Respond", agent: "Response Agent", status: "pending" },
   { key: "faithfulness", label: "Check faithfulness", agent: "Faithfulness Checker", status: "pending" },
   { key: "validate", label: "Validate & escalate", agent: "Escalation Rules", status: "pending" },
 ];
+
+export function startPipelineSteps(): PipelineStep[] {
+  return INITIAL_PIPELINE_STEPS.map((step) =>
+    step.key === "classify" ? { ...step, status: "active" } : { ...step },
+  );
+}
 
 export function applyPipelineStage(steps: PipelineStep[], stage: PipelineStage): PipelineStep[] {
   return steps.map((step) => {

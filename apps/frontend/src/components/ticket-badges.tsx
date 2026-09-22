@@ -3,7 +3,7 @@ import type { ComponentType } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { EscalationLevel, TicketCategory, TicketPriority } from "@/lib/api";
+import type { EscalationLevel, TicketCategory, TicketPriority, TicketStatus } from "@/lib/api";
 
 const CATEGORY_STYLES: Record<TicketCategory, string> = {
   billing: "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-400/20",
@@ -34,6 +34,29 @@ export function PriorityBadge({ priority }: { priority: TicketPriority }) {
   return (
     <Badge className={cn("rounded-md capitalize ring-1 ring-inset", PRIORITY_STYLES[priority])}>
       {priority} priority
+    </Badge>
+  );
+}
+
+const STATUS_STYLES: Record<TicketStatus, string> = {
+  auto_resolved:
+    "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-400/20",
+  pending_review:
+    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-400/20",
+  resolved:
+    "bg-slate-100 text-slate-700 ring-slate-500/20 dark:bg-slate-500/10 dark:text-slate-400 dark:ring-slate-400/20",
+};
+
+const STATUS_LABELS: Record<TicketStatus, string> = {
+  auto_resolved: "Auto-resolved",
+  pending_review: "Pending review",
+  resolved: "Resolved",
+};
+
+export function StatusBadge({ status }: { status: TicketStatus }) {
+  return (
+    <Badge className={cn("rounded-md ring-1 ring-inset", STATUS_STYLES[status])}>
+      {STATUS_LABELS[status]}
     </Badge>
   );
 }

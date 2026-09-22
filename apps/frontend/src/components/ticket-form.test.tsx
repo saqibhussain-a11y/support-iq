@@ -62,6 +62,12 @@ describe("TicketForm", () => {
     vi.unstubAllGlobals();
   });
 
+  it("does not show any pipeline step as active before a submission", () => {
+    render(<TicketForm />);
+
+    expect(screen.getByText("Classify ticket").closest("li")).toHaveAttribute("data-status", "pending");
+  });
+
   it("disables submit until a message is entered", () => {
     render(<TicketForm />);
 
