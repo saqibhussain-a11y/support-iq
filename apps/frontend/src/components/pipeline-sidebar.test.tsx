@@ -68,6 +68,21 @@ describe("applyPipelineStage", () => {
     steps = applyPipelineStage(steps, "validate");
     expect(statusOf(steps, "validate")).toBe("done");
   });
+
+  it("walks the escalate branch and skips both respond and faithfulness checking", () => {
+    let steps = INITIAL_PIPELINE_STEPS.map((step) => ({ ...step }));
+
+    steps = applyPipelineStage(steps, "classify");
+    steps = applyPipelineStage(steps, "escalate");
+
+    expect(statusOf(steps, "answer")).toBe("done");
+    expect(steps.find((step) => step.key === "answer")?.agent).toBe("Escalation Rules");
+    expect(statusOf(steps, "faithfulness")).toBe("skipped");
+    expect(statusOf(steps, "validate")).toBe("active");
+
+    steps = applyPipelineStage(steps, "validate");
+    expect(statusOf(steps, "validate")).toBe("done");
+  });
 });
 
 describe("applyToolCallEvent", () => {

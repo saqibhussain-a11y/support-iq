@@ -16,7 +16,7 @@ IMMEDIATE_ESCALATION_KEYWORDS = (
 LOW_CONFIDENCE_RERANK_THRESHOLD = 0.0
 
 
-def _mentions_immediate_escalation_keyword(message: str) -> bool:
+def mentions_immediate_escalation_keyword(message: str) -> bool:
     lowered = message.lower()
     return any(keyword in lowered for keyword in IMMEDIATE_ESCALATION_KEYWORDS)
 
@@ -27,7 +27,7 @@ def evaluate(
     response: SupportResponse,
     faithfulness: FaithfulnessVerdict | None = None,
 ) -> ValidationResult:
-    if _mentions_immediate_escalation_keyword(message):
+    if mentions_immediate_escalation_keyword(message):
         return ValidationResult(
             escalation=EscalationLevel.IMMEDIATE,
             reasons=["message mentions fraud, unauthorized access, or a stolen payment method"],

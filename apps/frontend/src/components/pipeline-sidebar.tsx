@@ -47,16 +47,19 @@ export function applyPipelineStage(steps: PipelineStep[], stage: PipelineStage):
     if (step.key === "answer" && stage === "clarify") {
       return { ...step, label: "Clarify", agent: "Clarifying Agent", status: "done" };
     }
+    if (step.key === "answer" && stage === "escalate") {
+      return { ...step, label: "Escalate", agent: "Escalation Rules", status: "done" };
+    }
     if (step.key === "faithfulness" && stage === "respond") {
       return { ...step, status: "active" };
     }
-    if (step.key === "faithfulness" && stage === "clarify") {
+    if (step.key === "faithfulness" && (stage === "clarify" || stage === "escalate")) {
       return { ...step, status: "skipped" };
     }
     if (step.key === "faithfulness" && stage === "check_faithfulness") {
       return { ...step, status: "done" };
     }
-    if (step.key === "validate" && stage === "clarify") {
+    if (step.key === "validate" && (stage === "clarify" || stage === "escalate")) {
       return { ...step, status: "active" };
     }
     if (step.key === "validate" && stage === "check_faithfulness") {

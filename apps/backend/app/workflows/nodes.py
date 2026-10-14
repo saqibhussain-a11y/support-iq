@@ -3,10 +3,11 @@ from langgraph.runtime import Runtime
 
 from app.agents.schemas import SupportResponse
 from app.observability.tracing import get_tracer
-from app.validation.rules import evaluate
+from app.validation.rules import evaluate, mentions_immediate_escalation_keyword
 from app.workflows.schemas import TicketState, WorkflowContext
 
 CLARIFY_ANSWER = "Could you share a bit more detail about your issue so I can help?"
+IMMEDIATE_ESCALATION_ANSWER = "This has been flagged for immediate review by our support team."
 
 
 async def classify_node(state: TicketState, runtime: Runtime[WorkflowContext]) -> dict:
@@ -46,7 +47,15 @@ async def clarify_node(state: TicketState) -> dict:
     return {"response": SupportResponse(answer=CLARIFY_ANSWER, sources=[], grounded=False)}
 
 
+async def escalate_node(state: TicketState) -> dict:
+    with get_tracer().start_as_current_span("workflow.escalate"):
+        pass
+    return {"response": SupportResponse(answer=IMMEDIATE_ESCALATION_ANSWER, sources=[], grounded=False)}
+
+
 def route_after_classification(state: TicketState) -> str:
+    if mentions_immediate_escalation_keyword(state["message"]):
+        return "escalate"
     return "clarify" if state["classification"].category == "other" else "respond"
 
 

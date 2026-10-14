@@ -84,7 +84,7 @@ export async function resolveTicket(ticketId: string, notes: string | null): Pro
   return res.json();
 }
 
-export type PipelineStage = "classify" | "respond" | "clarify" | "check_faithfulness" | "validate";
+export type PipelineStage = "classify" | "respond" | "clarify" | "escalate" | "check_faithfulness" | "validate";
 
 export type ToolCallPhase = "start" | "end";
 

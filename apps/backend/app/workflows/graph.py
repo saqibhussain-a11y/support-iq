@@ -8,6 +8,7 @@ from app.workflows.nodes import (
     check_faithfulness_node,
     classify_node,
     clarify_node,
+    escalate_node,
     respond_node,
     route_after_classification,
     validate_node,
@@ -22,14 +23,18 @@ def build_support_workflow() -> CompiledStateGraph:
     graph.add_node("classify", classify_node)
     graph.add_node("respond", respond_node)
     graph.add_node("clarify", clarify_node)
+    graph.add_node("escalate", escalate_node)
     graph.add_node("check_faithfulness", check_faithfulness_node)
     graph.add_node("validate", validate_node)
     graph.add_edge(START, "classify")
     graph.add_conditional_edges(
-        "classify", route_after_classification, {"respond": "respond", "clarify": "clarify"}
+        "classify",
+        route_after_classification,
+        {"respond": "respond", "clarify": "clarify", "escalate": "escalate"},
     )
     graph.add_edge("respond", "check_faithfulness")
     graph.add_edge("check_faithfulness", "validate")
     graph.add_edge("clarify", "validate")
+    graph.add_edge("escalate", "validate")
     graph.add_edge("validate", END)
     return graph.compile()

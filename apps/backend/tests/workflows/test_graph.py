@@ -103,6 +103,49 @@ async def test_workflow_escalates_immediately_on_fraud_keyword_even_when_misclas
 
 
 @pytest.mark.asyncio
+async def test_workflow_short_circuits_response_and_faithfulness_on_fraud_keyword():
+    classification = TicketClassification(category="account", priority="high", sentiment="angry")
+    responder = FakeResponder()
+    checker = FakeFaithfulnessChecker()
+    service = make_service(FakeClassifier(classification), responder, checker)
+
+    result = await service.run(session=object(), message="someone hacked my account")
+
+    assert responder.called is False
+    assert checker.called is False
+    assert result["escalation"] == EscalationLevel.IMMEDIATE
+    assert result["response"].answer == "This has been flagged for immediate review by our support team."
+
+
+@pytest.mark.asyncio
+async def test_workflow_token_usage_only_reflects_classify_on_the_escalate_path():
+    classification = TicketClassification(category="billing", priority="high", sentiment="angry")
+    responder = FakeResponder()
+    checker = FakeFaithfulnessChecker()
+    service = make_service(FakeClassifier(classification), responder, checker)
+
+    result = await service.run(session=object(), message="someone stole my card")
+
+    usage = result["token_usage"]
+    assert usage.classify == TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    assert usage.respond == TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+    assert usage.faithfulness == TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+    assert usage.total == TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+
+@pytest.mark.asyncio
+async def test_run_stream_skips_respond_and_faithfulness_stages_on_the_escalate_path():
+    classification = TicketClassification(category="billing", priority="high", sentiment="angry")
+    responder = FakeResponder()
+    service = make_service(FakeClassifier(classification), responder)
+
+    events = [event async for event in service.run_stream(session=object(), message="someone stole my card")]
+
+    stage_names = [event["stage"] for event in events if event["kind"] == "stage"]
+    assert stage_names == ["classify", "escalate", "validate"]
+
+
+@pytest.mark.asyncio
 async def test_workflow_escalates_for_review_on_low_confidence_billing_dispute():
     classification = TicketClassification(category="billing", priority="high", sentiment="frustrated")
     responder = FakeResponder(top_rerank_score=-3.4)
