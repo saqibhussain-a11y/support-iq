@@ -110,7 +110,7 @@ const TOOL_LABELS: Record<string, string> = {
 export function PipelineSidebar({ steps }: { steps: PipelineStep[] }) {
   return (
     <aside className="w-full shrink-0 md:w-72">
-      <div className="sticky top-6 rounded-lg border border-border bg-background p-4">
+      <div className="sticky top-20 rounded-xl border border-border bg-card p-4 shadow-sm md:top-6">
         <h2 className="text-sm font-semibold">Pipeline</h2>
         <p className="mb-4 text-xs text-muted-foreground">Live agent progress for this request.</p>
         <ol className="flex flex-col gap-3">

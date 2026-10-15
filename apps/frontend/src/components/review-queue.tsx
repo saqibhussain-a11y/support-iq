@@ -61,7 +61,7 @@ export function ReviewQueue() {
             className={cn(
               "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               tab === option.key
-                ? "bg-foreground text-background"
+                ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:text-foreground",
             )}
           >

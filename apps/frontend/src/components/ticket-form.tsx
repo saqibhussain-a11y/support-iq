@@ -83,7 +83,7 @@ export function TicketForm() {
                     key={example}
                     type="button"
                     onClick={() => setMessage(example)}
-                    className="cursor-pointer rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground"
+                    className="cursor-pointer rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                   >
                     {example.length > 40 ? `${example.slice(0, 40)}…` : example}
                   </button>
