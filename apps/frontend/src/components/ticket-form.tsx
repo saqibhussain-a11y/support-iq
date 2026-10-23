@@ -19,6 +19,7 @@ import {
 } from "@/components/pipeline-sidebar";
 import { CategoryBadge, ESCALATION_META, PriorityBadge, TokenUsageSummary } from "@/components/ticket-badges";
 import { TraceWaterfall } from "@/components/trace-waterfall";
+import { AnswerText } from "@/components/answer-text";
 
 const EXAMPLE_MESSAGES = [
   "I was charged twice for my subscription this month and I want a refund.",
@@ -172,7 +173,7 @@ function DraftAnswerCard({ response, status }: { response: SupportResponse; stat
       )}
 
       <CardContent className="flex flex-col gap-4 py-4">
-        <p className="text-sm leading-relaxed whitespace-pre-wrap">{response.answer}</p>
+        <AnswerText text={response.answer} />
 
         {response.sources.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
@@ -208,7 +209,7 @@ function TicketResultCard({ result }: { result: TicketResult }) {
           </Badge>
         </div>
 
-        <p className="text-sm leading-relaxed whitespace-pre-wrap">{result.response.answer}</p>
+        <AnswerText text={result.response.answer} />
 
         {result.response.sources.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">

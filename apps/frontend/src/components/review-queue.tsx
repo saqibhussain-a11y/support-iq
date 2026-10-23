@@ -16,6 +16,7 @@ import {
   TokenUsageSummary,
 } from "@/components/ticket-badges";
 import { TraceWaterfall } from "@/components/trace-waterfall";
+import { AnswerText } from "@/components/answer-text";
 
 type LoadState = "loading" | "ready" | "error";
 type QueueTab = Extract<TicketStatus, "pending_review" | "resolved">;
@@ -142,9 +143,9 @@ function QueueItem({ ticket, onResolved }: { ticket: TicketResult; onResolved: (
           {ticket.message}
         </p>
 
-        <p className="border-t border-border pt-3 text-sm leading-relaxed whitespace-pre-wrap">
-          {ticket.response.answer}
-        </p>
+        <div className="border-t border-border pt-3">
+          <AnswerText text={ticket.response.answer} />
+        </div>
 
         {ticket.escalation_reasons.length > 0 && (
           <div className={cn("flex gap-2 rounded-md p-3 text-xs ring-1 ring-inset", escalation.calloutClassName)}>
