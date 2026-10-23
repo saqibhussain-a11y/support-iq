@@ -58,6 +58,8 @@ async def create_ticket_stream(
                 if event["kind"] == "stage":
                     state.update(event["update"])
                     payload: dict = {"stage": event["stage"]}
+                    if "duration_s" in event:
+                        payload["duration_s"] = event["duration_s"]
                     if "response" in event["update"] and state["response"] is not None:
                         payload["response"] = state["response"].model_dump()
                     if "faithfulness" in event["update"] and state["faithfulness"] is not None:

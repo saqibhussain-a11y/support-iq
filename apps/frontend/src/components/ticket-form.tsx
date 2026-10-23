@@ -48,7 +48,7 @@ export function TicketForm() {
     try {
       for await (const streamEvent of streamTicket(message.trim())) {
         if (streamEvent.type === "stage") {
-          setSteps((current) => applyPipelineStage(current, streamEvent.stage));
+          setSteps((current) => applyPipelineStage(current, streamEvent.stage, streamEvent.duration_s));
           if (streamEvent.response) {
             setDraftResponse(streamEvent.response);
             setDraftStatus(streamEvent.stage === "respond" ? "verifying" : "none");

@@ -1,3 +1,4 @@
+import time
 from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,11 +46,15 @@ class SupportWorkflowService:
 
     async def run_stream(self, session: AsyncSession, message: str) -> AsyncIterator[dict]:
         context, initial_state = self._new_run(session, message)
+        last_boundary = time.monotonic()
         async for mode, chunk in self._graph.astream(
             initial_state, context=context, stream_mode=["updates", "custom"]
         ):
             if mode == "updates":
+                now = time.monotonic()
+                duration_s = round(now - last_boundary, 2)
+                last_boundary = now
                 for node_name, update in chunk.items():
-                    yield {"kind": "stage", "stage": node_name, "update": update}
+                    yield {"kind": "stage", "stage": node_name, "update": update, "duration_s": duration_s}
             else:
                 yield chunk

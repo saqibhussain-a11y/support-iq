@@ -102,6 +102,7 @@ export interface StageEvent {
   stage: PipelineStage;
   response?: SupportResponse;
   faithfulness?: FaithfulnessVerdict;
+  duration_s?: number;
 }
 
 export type StreamEvent = StageEvent | { type: "result"; result: TicketResult } | ToolCallEvent;
@@ -150,6 +151,7 @@ function parseSseEvent(raw: string): StreamEvent | null {
       stage: payload.stage as PipelineStage,
       response: payload.response as SupportResponse | undefined,
       faithfulness: payload.faithfulness as FaithfulnessVerdict | undefined,
+      duration_s: payload.duration_s as number | undefined,
     };
   }
   if (eventType === "result") return { type: "result", result: payload as TicketResult };

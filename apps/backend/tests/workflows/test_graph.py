@@ -236,3 +236,17 @@ async def test_run_stream_interleaves_tool_events_with_stage_events():
     stage_event_indices = [i for i, event in enumerate(events) if event["kind"] == "stage"]
     assert min(tool_event_indices) > stage_event_indices[respond_index - 1]
     assert max(tool_event_indices) < stage_event_indices[respond_index]
+
+
+@pytest.mark.asyncio
+async def test_run_stream_reports_a_duration_for_every_stage():
+    classification = TicketClassification(category="billing", priority="low", sentiment="neutral")
+    service = make_service(FakeClassifier(classification), FakeResponder())
+
+    events = [event async for event in service.run_stream(session=object(), message="I was charged twice")]
+
+    stage_events = [event for event in events if event["kind"] == "stage"]
+    assert len(stage_events) == 4
+    for event in stage_events:
+        assert isinstance(event["duration_s"], float)
+        assert event["duration_s"] >= 0
