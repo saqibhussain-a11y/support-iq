@@ -13,7 +13,16 @@ function buildSseStream(
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const classifyIndex = stages.indexOf("classify");
-  const stageChunks = stages.map((stage) => `event: stage\ndata: ${JSON.stringify({ stage })}\n\n`);
+  const stageChunks = stages.map((stage) => {
+    const payload: Record<string, unknown> = { stage };
+    if (stage === "respond" || stage === "clarify" || stage === "escalate") {
+      payload.response = result.response;
+    }
+    if (stage === "check_faithfulness" && result.faithfulness) {
+      payload.faithfulness = result.faithfulness;
+    }
+    return `event: stage\ndata: ${JSON.stringify(payload)}\n\n`;
+  });
   const toolChunks = toolEvents.map((event) => `event: tool\ndata: ${JSON.stringify(event)}\n\n`);
   const chunks = [
     ...stageChunks.slice(0, classifyIndex + 1),
@@ -25,6 +34,17 @@ function buildSseStream(
     start(controller) {
       for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
       controller.close();
+    },
+  });
+}
+
+function buildOpenSseStream(events: { event: string; data: unknown }[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const { event, data } of events) {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      }
     },
   });
 }
@@ -210,6 +230,50 @@ describe("TicketForm", () => {
 
     expect(await screen.findByText("Escalated immediately")).toBeInTheDocument();
     expect(screen.getByText("message mentions a stolen payment method")).toBeInTheDocument();
+  });
+
+  it("shows a draft answer with a verifying indicator before the faithfulness check completes", async () => {
+    const result = baseResult();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: buildOpenSseStream([
+          { event: "stage", data: { stage: "classify" } },
+          { event: "stage", data: { stage: "respond", response: result.response } },
+        ]),
+      }),
+    );
+    render(<TicketForm />);
+
+    submit("I was charged twice");
+
+    expect(await screen.findByText("You're eligible for a refund.")).toBeInTheDocument();
+    expect(screen.getByText("Verifying accuracy…")).toBeInTheDocument();
+    expect(screen.queryByText("Resolved automatically")).not.toBeInTheDocument();
+  });
+
+  it("shows an unsupported-claims warning on the draft answer as soon as the faithfulness check fails", async () => {
+    const result = baseResult({
+      faithfulness: { is_faithful: false, unsupported_claims: ["a fabricated 60-day window"] },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: buildOpenSseStream([
+          { event: "stage", data: { stage: "classify" } },
+          { event: "stage", data: { stage: "respond", response: result.response } },
+          { event: "stage", data: { stage: "check_faithfulness", faithfulness: result.faithfulness } },
+        ]),
+      }),
+    );
+    render(<TicketForm />);
+
+    submit("I was charged twice");
+
+    expect(await screen.findByText("Answer may contain unsupported claims")).toBeInTheDocument();
+    expect(screen.queryByText("Verifying accuracy…")).not.toBeInTheDocument();
   });
 
   it("shows an error message when the request fails", async () => {

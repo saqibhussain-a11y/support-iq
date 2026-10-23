@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, MessageSquareWarning, Send } from "lucide-react";
+import { CheckCircle2, Loader2, MessageSquareWarning, Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { streamTicket, type TicketResult } from "@/lib/api";
+import { streamTicket, type SupportResponse, type TicketResult } from "@/lib/api";
 import {
   applyPipelineStage,
   applyToolCallEvent,
@@ -26,12 +26,15 @@ const EXAMPLE_MESSAGES = [
 ];
 
 type SubmitState = "idle" | "loading" | "error";
+type DraftStatus = "verifying" | "faithful" | "unfaithful" | "none";
 
 export function TicketForm() {
   const [message, setMessage] = useState("");
   const [state, setState] = useState<SubmitState>("idle");
   const [result, setResult] = useState<TicketResult | null>(null);
   const [steps, setSteps] = useState<PipelineStep[]>(INITIAL_PIPELINE_STEPS);
+  const [draftResponse, setDraftResponse] = useState<SupportResponse | null>(null);
+  const [draftStatus, setDraftStatus] = useState<DraftStatus>("none");
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -39,15 +42,26 @@ export function TicketForm() {
 
     setState("loading");
     setResult(null);
+    setDraftResponse(null);
+    setDraftStatus("none");
     setSteps(startPipelineSteps());
     try {
       for await (const streamEvent of streamTicket(message.trim())) {
         if (streamEvent.type === "stage") {
           setSteps((current) => applyPipelineStage(current, streamEvent.stage));
+          if (streamEvent.response) {
+            setDraftResponse(streamEvent.response);
+            setDraftStatus(streamEvent.stage === "respond" ? "verifying" : "none");
+          }
+          if (streamEvent.faithfulness) {
+            setDraftStatus(streamEvent.faithfulness.is_faithful ? "faithful" : "unfaithful");
+          }
         } else if (streamEvent.type === "tool") {
           setSteps((current) => applyToolCallEvent(current, streamEvent));
         } else {
           setResult(streamEvent.result);
+          setDraftResponse(null);
+          setDraftStatus("none");
         }
       }
       setState("idle");
@@ -116,11 +130,61 @@ export function TicketForm() {
           </CardContent>
         </Card>
 
-        {result && <TicketResultCard result={result} />}
+        {result ? (
+          <TicketResultCard result={result} />
+        ) : (
+          draftResponse && <DraftAnswerCard response={draftResponse} status={draftStatus} />
+        )}
       </div>
 
       <PipelineSidebar steps={steps} />
     </div>
+  );
+}
+
+function DraftAnswerCard({ response, status }: { response: SupportResponse; status: DraftStatus }) {
+  return (
+    <Card className="overflow-hidden py-0">
+      {status !== "none" && (
+        <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
+          {status === "verifying" && (
+            <>
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              <span className="text-sm font-semibold text-muted-foreground">Verifying accuracy…</span>
+            </>
+          )}
+          {status === "unfaithful" && (
+            <>
+              <MessageSquareWarning className="size-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-400">
+                Answer may contain unsupported claims
+              </span>
+            </>
+          )}
+          {status === "faithful" && (
+            <>
+              <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-400">Verified</span>
+            </>
+          )}
+        </div>
+      )}
+
+      <CardContent className="flex flex-col gap-4 py-4">
+        <p className="text-sm leading-relaxed whitespace-pre-wrap">{response.answer}</p>
+
+        {response.sources.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+            <span className="text-xs font-medium text-muted-foreground">Sources</span>
+            {response.sources.map((source) => (
+              <Badge key={source} variant="secondary" className="rounded-md font-mono text-[0.7rem] font-normal">
+                {source}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

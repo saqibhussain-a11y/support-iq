@@ -150,12 +150,21 @@ async def test_stream_ticket_emits_stage_events_then_result():
     tool_events = [e for e in events if e.startswith("event: tool")]
     result_events = [e for e in events if e.startswith("event: result")]
 
-    assert [json.loads(e.split("data: ", 1)[1])["stage"] for e in stage_events] == [
+    stage_payloads = [json.loads(e.split("data: ", 1)[1]) for e in stage_events]
+    assert [payload["stage"] for payload in stage_payloads] == [
         "classify",
         "respond",
         "check_faithfulness",
         "validate",
     ]
+    respond_payload = stage_payloads[1]
+    assert respond_payload["response"]["answer"] == "You're eligible for a refund."
+    assert respond_payload["response"]["sources"] == ["doc.md"]
+    faithfulness_payload = stage_payloads[2]
+    assert faithfulness_payload["faithfulness"] == {"is_faithful": True, "unsupported_claims": []}
+    assert "response" not in stage_payloads[0]
+    assert "faithfulness" not in stage_payloads[1]
+
     assert [json.loads(e.split("data: ", 1)[1]) for e in tool_events] == [
         {"phase": "start", "tool": "search_knowledge_base", "arguments": {"query": "I was charged twice"}},
         {"phase": "end", "tool": "search_knowledge_base", "found": True, "sources": ["doc.md"]},

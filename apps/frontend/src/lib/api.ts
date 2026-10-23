@@ -97,10 +97,14 @@ export interface ToolCallEvent {
   sources?: string[];
 }
 
-export type StreamEvent =
-  | { type: "stage"; stage: PipelineStage }
-  | { type: "result"; result: TicketResult }
-  | ToolCallEvent;
+export interface StageEvent {
+  type: "stage";
+  stage: PipelineStage;
+  response?: SupportResponse;
+  faithfulness?: FaithfulnessVerdict;
+}
+
+export type StreamEvent = StageEvent | { type: "result"; result: TicketResult } | ToolCallEvent;
 
 export async function* streamTicket(message: string): AsyncGenerator<StreamEvent> {
   const res = await fetch(`${getApiUrl()}/api/tickets/stream`, {
@@ -140,7 +144,14 @@ function parseSseEvent(raw: string): StreamEvent | null {
   if (!data) return null;
 
   const payload = JSON.parse(data);
-  if (eventType === "stage") return { type: "stage", stage: payload.stage as PipelineStage };
+  if (eventType === "stage") {
+    return {
+      type: "stage",
+      stage: payload.stage as PipelineStage,
+      response: payload.response as SupportResponse | undefined,
+      faithfulness: payload.faithfulness as FaithfulnessVerdict | undefined,
+    };
+  }
   if (eventType === "result") return { type: "result", result: payload as TicketResult };
   if (eventType === "tool") return { type: "tool", ...payload };
   return null;
