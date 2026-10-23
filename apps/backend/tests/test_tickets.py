@@ -127,6 +127,7 @@ async def test_create_ticket_returns_classification_and_response():
     assert body["resolved_at"] is None
     assert body["token_usage"]["total"] == {"prompt_tokens": 75, "completion_tokens": 30, "total_tokens": 105}
     assert body["token_usage"]["respond"] == {"prompt_tokens": 40, "completion_tokens": 20, "total_tokens": 60}
+    assert len(body["trace_id"]) == 32
 
 
 @pytest.mark.asyncio
@@ -175,6 +176,8 @@ async def test_stream_ticket_emits_stage_events_then_result():
     assert result_body["escalation"] == "none"
     assert result_body["status"] == "auto_resolved"
     assert result_body["token_usage"]["total"]["total_tokens"] == 105
+    assert len(result_body["trace_id"]) == 32
+    int(result_body["trace_id"], 16)
 
 
 @pytest.mark.asyncio

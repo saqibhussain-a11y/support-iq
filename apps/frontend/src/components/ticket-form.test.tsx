@@ -81,6 +81,7 @@ function baseResult(overrides: Partial<TicketResult> = {}): TicketResult {
       faithfulness: { prompt_tokens: 611, completion_tokens: 290, total_tokens: 901 },
       total: { prompt_tokens: 1876, completion_tokens: 576, total_tokens: 2452 },
     },
+    trace_id: "b36ee8ce2ecbb2c45cafe579e39a2db3",
     status: "auto_resolved",
     created_at: "2026-09-22T12:00:00Z",
     resolved_at: null,

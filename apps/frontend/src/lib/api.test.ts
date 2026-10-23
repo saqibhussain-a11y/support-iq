@@ -18,6 +18,7 @@ function makeResult(overrides: Partial<TicketResult> = {}): TicketResult {
     escalation: "none",
     escalation_reasons: [],
     token_usage: null,
+    trace_id: null,
     status: "auto_resolved",
     created_at: "2026-09-22T12:00:00Z",
     resolved_at: null,

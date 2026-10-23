@@ -4,6 +4,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from app.api.health import router as health_router
 from app.api.tickets import router as tickets_router
+from app.api.traces import router as traces_router
 from app.core.config import get_settings
 from app.observability.tracing import configure_tracing
 
@@ -11,7 +12,7 @@ settings = get_settings()
 configure_tracing()
 
 app = FastAPI(title="SupportIQ API", version="0.1.0")
-FastAPIInstrumentor.instrument_app(app)
+FastAPIInstrumentor.instrument_app(app, excluded_urls="api/traces", exclude_spans=["send", "receive"])
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,3 +24,4 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(tickets_router)
+app.include_router(traces_router)

@@ -18,6 +18,7 @@ import {
   type PipelineStep,
 } from "@/components/pipeline-sidebar";
 import { CategoryBadge, ESCALATION_META, PriorityBadge, TokenUsageSummary } from "@/components/ticket-badges";
+import { TraceWaterfall } from "@/components/trace-waterfall";
 
 const EXAMPLE_MESSAGES = [
   "I was charged twice for my subscription this month and I want a refund.",
@@ -48,7 +49,7 @@ export function TicketForm() {
     try {
       for await (const streamEvent of streamTicket(message.trim())) {
         if (streamEvent.type === "stage") {
-          setSteps((current) => applyPipelineStage(current, streamEvent.stage, streamEvent.duration_s));
+          setSteps((current) => applyPipelineStage(current, streamEvent.stage));
           if (streamEvent.response) {
             setDraftResponse(streamEvent.response);
             setDraftStatus(streamEvent.stage === "respond" ? "verifying" : "none");
@@ -249,6 +250,7 @@ function TicketResultCard({ result }: { result: TicketResult }) {
         )}
 
         {result.token_usage && <TokenUsageSummary usage={result.token_usage} />}
+        {result.trace_id && <TraceWaterfall traceId={result.trace_id} />}
       </CardContent>
     </Card>
   );

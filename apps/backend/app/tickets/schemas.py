@@ -25,6 +25,7 @@ class TicketRecordOut(BaseModel):
     escalation: EscalationLevel
     escalation_reasons: list[str]
     token_usage: TokenUsageBreakdown | None
+    trace_id: str | None
     status: TicketStatus
     created_at: datetime
     resolved_at: datetime | None

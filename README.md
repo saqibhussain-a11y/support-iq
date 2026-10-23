@@ -9,15 +9,20 @@ foundational infrastructure through RAG, multi-agent orchestration, evaluation, 
 
 ## Getting started
 
-Only Postgres runs in Docker. The backend and frontend run natively on your machine — faster
-iteration, no image rebuilds on every code change.
+Only infrastructure runs in Docker — Postgres and Jaeger (the OpenTelemetry trace store). The
+backend and frontend run natively on your machine — faster iteration, no image rebuilds on every
+code change.
 
-### 1. Start the database
+### 1. Start the database and tracing backend
 
 ```bash
 cp .env.example .env
 docker compose up -d
 ```
+
+Jaeger's UI is at http://localhost:16686. The backend exports every span to it over OTLP
+(`OTEL_EXPORTER_OTLP_ENDPOINT`), and each ticket card in the app has an expandable
+**OpenTelemetry trace** waterfall rendered from the real spans stored there.
 
 ### 2. Start the backend
 
@@ -561,6 +566,41 @@ dense/sparse counts. LangSmith gives the clean, zero-code, LangGraph-native exec
 OpenTelemetry gives the cost- and retrieval-level detail LangSmith's auto-instrumentation can't
 see. Running both is deliberate, not duplicated effort.
 
+**OpenTelemetry → Jaeger → the frontend.** Spans used to stop at `ConsoleSpanExporter`. Now:
+
+- `app/observability/tracing.py` — adds an `OTLPSpanExporter` behind a `BatchSpanProcessor`
+  (500 ms flush) when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and `current_trace_id()` to read the
+  active trace ID as 32-char hex.
+- `app/api/tickets.py` — wraps each run in a `ticket.process` span and persists the trace ID on
+  the ticket (`tickets.trace_id`, migration `0005`), so every ticket links to its own trace.
+- `app/main.py` — `FastAPIInstrumentor` now excludes per-chunk `send`/`receive` spans (an SSE
+  response otherwise produces one span per streamed event) and excludes `/api/traces` itself so
+  polling for a trace doesn't generate new traces.
+- `app/observability/jaeger.py` + `GET /api/traces/{trace_id}` — proxies Jaeger's query API and
+  normalizes its response into ordered spans with parent IDs, start offsets, durations and
+  attributes. `complete` is true once the root span (no parent) has arrived — spans are batched,
+  so a trace can be partially visible for a moment after the response finishes.
+- `src/components/trace-waterfall.tsx` — collapsed by default; when opened, polls until the trace
+  is complete and renders the span tree as a timeline (LLM calls, graph nodes, and tool/retrieval
+  spans colour-coded), with attributes on hover and a deep link into Jaeger.
+
+A real trace for "How do I reset my password?", as shown in the UI:
+
+```
+POST /api/tickets/stream                 4027 ms
+  ticket.process                         4024 ms
+    workflow.classify                     952 ms
+      groq.chat.completions               952 ms
+    workflow.respond                     1913 ms
+      groq.chat.completions               456 ms
+      agent.tool_call                     337 ms
+        retrieval.search                  337 ms
+      groq.chat.completions              1119 ms
+    workflow.check_faithfulness          1110 ms
+      groq.chat.completions              1110 ms
+    workflow.validate                       0 ms
+```
+
 ## Module 11 — Frontend (current)
 
 A real UI over `POST /api/tickets`, replacing the Module 1 system-status-only placeholder page.
@@ -615,7 +655,7 @@ Visit http://localhost:3000, type a message (or click one of the example buttons
 | Frontend   | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, shadcn/ui |
 | Backend    | FastAPI, Pydantic v2, SQLAlchemy (async), Alembic, Groq SDK, fastembed, LangGraph, OpenTelemetry, LangSmith |
 | Database   | PostgreSQL 16 + pgvector                 |
-| Infra      | Docker Compose (Postgres only) — backend and frontend run natively |
+| Infra      | Docker Compose (Postgres + Jaeger) — backend and frontend run natively |
 
 ### Project structure
 

@@ -18,7 +18,6 @@ export interface PipelineStep {
   agent: string;
   status: StepStatus;
   toolCalls?: ToolCallEntry[];
-  durationS?: number;
 }
 
 export const INITIAL_PIPELINE_STEPS: PipelineStep[] = [
@@ -34,26 +33,22 @@ export function startPipelineSteps(): PipelineStep[] {
   );
 }
 
-export function applyPipelineStage(
-  steps: PipelineStep[],
-  stage: PipelineStage,
-  durationS?: number,
-): PipelineStep[] {
+export function applyPipelineStage(steps: PipelineStep[], stage: PipelineStage): PipelineStep[] {
   return steps.map((step) => {
     if (step.key === "classify" && stage === "classify") {
-      return { ...step, status: "done", durationS };
+      return { ...step, status: "done" };
     }
     if (step.key === "answer" && stage === "classify") {
       return { ...step, status: "active" };
     }
     if (step.key === "answer" && stage === "respond") {
-      return { ...step, label: "Respond", agent: "Response Agent", status: "done", durationS };
+      return { ...step, label: "Respond", agent: "Response Agent", status: "done" };
     }
     if (step.key === "answer" && stage === "clarify") {
-      return { ...step, label: "Clarify", agent: "Clarifying Agent", status: "done", durationS };
+      return { ...step, label: "Clarify", agent: "Clarifying Agent", status: "done" };
     }
     if (step.key === "answer" && stage === "escalate") {
-      return { ...step, label: "Escalate", agent: "Escalation Rules", status: "done", durationS };
+      return { ...step, label: "Escalate", agent: "Escalation Rules", status: "done" };
     }
     if (step.key === "faithfulness" && stage === "respond") {
       return { ...step, status: "active" };
@@ -62,7 +57,7 @@ export function applyPipelineStage(
       return { ...step, status: "skipped" };
     }
     if (step.key === "faithfulness" && stage === "check_faithfulness") {
-      return { ...step, status: "done", durationS };
+      return { ...step, status: "done" };
     }
     if (step.key === "validate" && (stage === "clarify" || stage === "escalate")) {
       return { ...step, status: "active" };
@@ -71,7 +66,7 @@ export function applyPipelineStage(
       return { ...step, status: "active" };
     }
     if (step.key === "validate" && stage === "validate") {
-      return { ...step, status: "done", durationS };
+      return { ...step, status: "done" };
     }
     return step;
   });
@@ -113,21 +108,11 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 export function PipelineSidebar({ steps }: { steps: PipelineStep[] }) {
-  const totalDurationS = steps.reduce((sum, step) => sum + (step.durationS ?? 0), 0);
-  const isComplete = steps.every((step) => step.status === "done" || step.status === "skipped");
-
   return (
     <aside className="w-full shrink-0 md:w-72">
       <div className="sticky top-20 rounded-xl border border-border bg-card p-4 shadow-sm md:top-6">
-        <div className="mb-4 flex items-baseline justify-between">
-          <div>
-            <h2 className="text-sm font-semibold">Pipeline</h2>
-            <p className="text-xs text-muted-foreground">Live agent progress for this request.</p>
-          </div>
-          {isComplete && totalDurationS > 0 && (
-            <span className="text-xs font-medium text-muted-foreground">{totalDurationS.toFixed(1)}s total</span>
-          )}
-        </div>
+        <h2 className="text-sm font-semibold">Pipeline</h2>
+        <p className="mb-4 text-xs text-muted-foreground">Live agent progress for this request.</p>
         <ol className="flex flex-col gap-3">
           {steps.map((step) => (
             <li key={step.key} data-status={step.status} className="flex flex-col gap-2">
@@ -143,11 +128,7 @@ export function PipelineSidebar({ steps }: { steps: PipelineStep[] }) {
                     {step.label}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {step.status === "skipped"
-                      ? "Skipped"
-                      : step.durationS !== undefined
-                        ? `${step.agent} · ${step.durationS.toFixed(1)}s`
-                        : step.agent}
+                    {step.status === "skipped" ? "Skipped" : step.agent}
                   </span>
                 </div>
               </div>

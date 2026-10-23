@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session, session_scope
+from app.observability.tracing import current_trace_id, get_tracer
 from app.tickets.repository import list_tickets, resolve_ticket, save_ticket
 from app.tickets.schemas import ResolveTicketRequest, TicketRecordOut, TicketStatus
 from app.workflows.dependencies import get_support_workflow_service
@@ -26,17 +27,19 @@ async def create_ticket(
     session: AsyncSession = Depends(get_db_session),
     workflow: SupportWorkflowService = Depends(get_support_workflow_service),
 ) -> TicketRecordOut:
-    result = await workflow.run(session, request.message)
-    return await save_ticket(
-        session,
-        message=request.message,
-        classification=result["classification"],
-        response=result["response"],
-        faithfulness=result["faithfulness"],
-        escalation=result["escalation"],
-        escalation_reasons=result["escalation_reasons"],
-        token_usage=result["token_usage"],
-    )
+    with get_tracer().start_as_current_span("ticket.process"):
+        result = await workflow.run(session, request.message)
+        return await save_ticket(
+            session,
+            message=request.message,
+            classification=result["classification"],
+            response=result["response"],
+            faithfulness=result["faithfulness"],
+            escalation=result["escalation"],
+            escalation_reasons=result["escalation_reasons"],
+            token_usage=result["token_usage"],
+            trace_id=current_trace_id(),
+        )
 
 
 @router.post("/tickets/stream")
@@ -53,33 +56,33 @@ async def create_ticket_stream(
             "escalation_reasons": [],
             "token_usage": None,
         }
-        async with session_scope() as session:
-            async for event in workflow.run_stream(session, request.message):
-                if event["kind"] == "stage":
-                    state.update(event["update"])
-                    payload: dict = {"stage": event["stage"]}
-                    if "duration_s" in event:
-                        payload["duration_s"] = event["duration_s"]
-                    if "response" in event["update"] and state["response"] is not None:
-                        payload["response"] = state["response"].model_dump()
-                    if "faithfulness" in event["update"] and state["faithfulness"] is not None:
-                        payload["faithfulness"] = state["faithfulness"].model_dump()
-                    yield f"event: stage\ndata: {json.dumps(payload)}\n\n"
-                else:
-                    payload = {key: value for key, value in event.items() if key != "kind"}
-                    yield f"event: tool\ndata: {json.dumps(payload)}\n\n"
+        with get_tracer().start_as_current_span("ticket.process"):
+            async with session_scope() as session:
+                async for event in workflow.run_stream(session, request.message):
+                    if event["kind"] == "stage":
+                        state.update(event["update"])
+                        payload: dict = {"stage": event["stage"]}
+                        if "response" in event["update"] and state["response"] is not None:
+                            payload["response"] = state["response"].model_dump()
+                        if "faithfulness" in event["update"] and state["faithfulness"] is not None:
+                            payload["faithfulness"] = state["faithfulness"].model_dump()
+                        yield f"event: stage\ndata: {json.dumps(payload)}\n\n"
+                    else:
+                        payload = {key: value for key, value in event.items() if key != "kind"}
+                        yield f"event: tool\ndata: {json.dumps(payload)}\n\n"
 
-            record = await save_ticket(
-                session,
-                message=request.message,
-                classification=state["classification"],
-                response=state["response"],
-                faithfulness=state["faithfulness"],
-                escalation=state["escalation"],
-                escalation_reasons=state["escalation_reasons"],
-                token_usage=state["token_usage"],
-            )
-        yield f"event: result\ndata: {record.model_dump_json()}\n\n"
+                record = await save_ticket(
+                    session,
+                    message=request.message,
+                    classification=state["classification"],
+                    response=state["response"],
+                    faithfulness=state["faithfulness"],
+                    escalation=state["escalation"],
+                    escalation_reasons=state["escalation_reasons"],
+                    token_usage=state["token_usage"],
+                    trace_id=current_trace_id(),
+                )
+            yield f"event: result\ndata: {record.model_dump_json()}\n\n"
 
     return StreamingResponse(event_source(), media_type="text/event-stream")
 

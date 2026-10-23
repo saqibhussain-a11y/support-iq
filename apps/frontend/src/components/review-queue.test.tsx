@@ -25,6 +25,7 @@ function makeTicket(overrides: Partial<TicketResult> = {}): TicketResult {
       faithfulness: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
       total: { prompt_tokens: 173, completion_tokens: 82, total_tokens: 255 },
     },
+    trace_id: null,
     status: "pending_review",
     created_at: "2026-09-22T12:00:00Z",
     resolved_at: null,

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     langsmith_project: str = "supportiq"
 
     otel_console_export: bool = False
+    otel_exporter_otlp_endpoint: str | None = None
+    jaeger_query_url: str = "http://localhost:16686"
 
 
 @lru_cache

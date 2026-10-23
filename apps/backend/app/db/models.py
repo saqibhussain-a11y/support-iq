@@ -38,6 +38,7 @@ class TicketRecord(Base):
     escalation: Mapped[str] = mapped_column(String(20), nullable=False)
     escalation_reasons: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     token_usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

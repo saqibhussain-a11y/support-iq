@@ -28,6 +28,7 @@ def _to_out(record: TicketRecord) -> TicketRecordOut:
         escalation=EscalationLevel(record.escalation),
         escalation_reasons=record.escalation_reasons,
         token_usage=TokenUsageBreakdown(**record.token_usage) if record.token_usage else None,
+        trace_id=record.trace_id,
         status=TicketStatus(record.status),
         created_at=record.created_at,
         resolved_at=record.resolved_at,
@@ -44,6 +45,7 @@ async def save_ticket(
     escalation: EscalationLevel,
     escalation_reasons: list[str],
     token_usage: TokenUsageBreakdown | None = None,
+    trace_id: str | None = None,
 ) -> TicketRecordOut:
     record = TicketRecord(
         message=message,
@@ -55,6 +57,7 @@ async def save_ticket(
         escalation=escalation.value,
         escalation_reasons=escalation_reasons,
         token_usage=token_usage.model_dump() if token_usage else None,
+        trace_id=trace_id,
         status=_status_for_escalation(escalation).value,
     )
     session.add(record)

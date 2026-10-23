@@ -15,6 +15,7 @@ import {
   StatusBadge,
   TokenUsageSummary,
 } from "@/components/ticket-badges";
+import { TraceWaterfall } from "@/components/trace-waterfall";
 
 type LoadState = "loading" | "ready" | "error";
 type QueueTab = Extract<TicketStatus, "pending_review" | "resolved">;
@@ -191,6 +192,7 @@ function QueueItem({ ticket, onResolved }: { ticket: TicketResult; onResolved: (
         )}
 
         {ticket.token_usage && <TokenUsageSummary usage={ticket.token_usage} />}
+        {ticket.trace_id && <TraceWaterfall traceId={ticket.trace_id} />}
       </CardContent>
     </Card>
   );

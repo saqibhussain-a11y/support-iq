@@ -2,6 +2,10 @@ export function getApiUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
+export function getJaegerUrl(): string {
+  return process.env.NEXT_PUBLIC_JAEGER_URL ?? "http://localhost:16686";
+}
+
 export type TicketCategory = "billing" | "shipping" | "product" | "account" | "other";
 export type TicketPriority = "low" | "medium" | "high";
 export type TicketSentiment = "positive" | "neutral" | "frustrated" | "angry";
@@ -50,6 +54,7 @@ export interface TicketResult {
   escalation: EscalationLevel;
   escalation_reasons: string[];
   token_usage: TokenUsageBreakdown | null;
+  trace_id: string | null;
   status: TicketStatus;
   created_at: string;
   resolved_at: string | null;
@@ -84,6 +89,32 @@ export async function resolveTicket(ticketId: string, notes: string | null): Pro
   return res.json();
 }
 
+export interface TraceSpan {
+  span_id: string;
+  parent_span_id: string | null;
+  name: string;
+  start_offset_ms: number;
+  duration_ms: number;
+  attributes: Record<string, string | number | boolean>;
+}
+
+export interface Trace {
+  trace_id: string;
+  duration_ms: number;
+  complete: boolean;
+  spans: TraceSpan[];
+}
+
+export class TracingUnavailableError extends Error {}
+
+export async function fetchTrace(traceId: string): Promise<Trace | null> {
+  const res = await fetch(`${getApiUrl()}/api/traces/${traceId}`, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (res.status === 503) throw new TracingUnavailableError("Tracing backend unavailable");
+  if (!res.ok) throw new Error(`Fetching trace failed: ${res.status}`);
+  return res.json();
+}
+
 export type PipelineStage = "classify" | "respond" | "clarify" | "escalate" | "check_faithfulness" | "validate";
 
 export type ToolCallPhase = "start" | "end";
@@ -102,7 +133,6 @@ export interface StageEvent {
   stage: PipelineStage;
   response?: SupportResponse;
   faithfulness?: FaithfulnessVerdict;
-  duration_s?: number;
 }
 
 export type StreamEvent = StageEvent | { type: "result"; result: TicketResult } | ToolCallEvent;
@@ -151,7 +181,6 @@ function parseSseEvent(raw: string): StreamEvent | null {
       stage: payload.stage as PipelineStage,
       response: payload.response as SupportResponse | undefined,
       faithfulness: payload.faithfulness as FaithfulnessVerdict | undefined,
-      duration_s: payload.duration_s as number | undefined,
     };
   }
   if (eventType === "result") return { type: "result", result: payload as TicketResult };
